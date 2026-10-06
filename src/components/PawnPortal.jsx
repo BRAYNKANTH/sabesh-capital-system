@@ -107,6 +107,7 @@ export default function PawnPortal({ orgName, showToast, onBack }) {
   const [summary, setSummary] = useState(null);
   const [loans, setLoans] = useState(null);
   const [filter, setFilter] = useState('active');
+  const [typeFilter, setTypeFilter] = useState('all'); // all | vehicle | gold
   const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -154,7 +155,11 @@ export default function PawnPortal({ orgName, showToast, onBack }) {
     return true;
   };
   const q = search.trim().toLowerCase();
-  const shown = (loans || []).filter(matches).filter((l) => !q || [l.customer_name, l.nic_number, l.mobile, l.reference_number, l.item_description].some((v) => (v || '').toLowerCase().includes(q)));
+  const matchesSearch = (l) => !q || [l.customer_name, l.nic_number, l.mobile, l.reference_number, l.item_description].some((v) => (v || '').toLowerCase().includes(q));
+  // Counts on the type buttons follow the status filter and search, so they match what you'd see after tapping.
+  const typeBase = (loans || []).filter(matches).filter(matchesSearch);
+  const typeCounts = { all: typeBase.length, vehicle: typeBase.filter((l) => l.pawn_type === 'vehicle').length, gold: typeBase.filter((l) => l.pawn_type === 'gold').length };
+  const shown = typeBase.filter((l) => typeFilter === 'all' || l.pawn_type === typeFilter);
   const c = summary?.counts;
   const t = summary?.totals;
 
@@ -186,7 +191,7 @@ export default function PawnPortal({ orgName, showToast, onBack }) {
         <div className="kpi-card"><span className="kpi-lbl">Items to return</span><h3 className="kpi-val">{c ? c.awaitingReturn : '…'}</h3><span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Loans fully paid, item still held</span></div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div role="group" aria-label="Filter pawn loans" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {FILTERS.map((f) => (
             <button key={f.key} type="button" aria-pressed={filter === f.key}
@@ -194,9 +199,24 @@ export default function PawnPortal({ orgName, showToast, onBack }) {
               style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => setFilter(f.key)}>{f.label}</button>
           ))}
         </div>
-        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '220px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div role="group" aria-label="Filter by item type" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[
+            { key: 'all', label: 'All items', Icon: null },
+            { key: 'vehicle', label: 'Vehicles', Icon: Car },
+            { key: 'gold', label: 'Gold', Icon: Gem }
+          ].map((f) => (
+            <button key={f.key} type="button" aria-pressed={typeFilter === f.key}
+              className={`glass-btn ${typeFilter === f.key ? 'glass-btn-emerald' : 'glass-btn-secondary'}`}
+              style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => setTypeFilter(f.key)}>
+              {f.Icon && <f.Icon className="icon" />} {f.label} ({typeCounts[f.key]})
+            </button>
+          ))}
+        </div>
+        <div style={{ position: 'relative', flex: '1 1 300px', minWidth: '240px' }}>
           <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '16px', height: '16px', color: 'var(--text-muted)' }} aria-hidden="true" />
           <input type="search" className="glass-input" aria-label="Search pawn loans" placeholder="Search name, NIC, phone, ticket no. or item…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ paddingLeft: '36px', width: '100%' }} />
+        </div>
         </div>
       </div>
 
