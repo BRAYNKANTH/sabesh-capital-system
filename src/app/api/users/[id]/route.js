@@ -91,7 +91,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ message: 'Forbidden.' }, { status: 403 });
     }
 
-    const { name, phone, role, email, gender, finance_access, ticket_access } = await request.json();
+    const { name, phone, role, email, gender, finance_access, ticket_access, pawn_access } = await request.json();
 
     const targetUser = await db('users').where({ id }).first();
     if (!targetUser) {
@@ -176,8 +176,13 @@ export async function PATCH(request, { params }) {
       changes.push(`ticket_access: '${targetUser.ticket_access}' -> '${!!ticket_access}'`);
     }
 
+    if (pawn_access !== undefined) {
+      updates.pawn_access = !!pawn_access;
+      changes.push(`pawn_access: '${targetUser.pawn_access}' -> '${!!pawn_access}'`);
+    }
+
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ message: 'No editable fields supplied (name, phone, role, email, gender, finance_access, ticket_access).' }, { status: 400 });
+      return NextResponse.json({ message: 'No editable fields supplied (name, phone, role, email, gender, finance_access, ticket_access, pawn_access).' }, { status: 400 });
     }
 
     updates.updated_at = db.fn.now();
@@ -191,7 +196,7 @@ export async function PATCH(request, { params }) {
 
     // Never select('*') for a response that reaches the client — this
     // previously sent the bcrypt password_hash straight back in the JSON.
-    const updatedUser = await db('users').where({ id }).select('id', 'name', 'email', 'phone', 'gender', 'role', 'is_active', 'must_change_password', 'finance_access', 'ticket_access', 'created_at').first();
+    const updatedUser = await db('users').where({ id }).select('id', 'name', 'email', 'phone', 'gender', 'role', 'is_active', 'must_change_password', 'finance_access', 'ticket_access', 'pawn_access', 'created_at').first();
     return NextResponse.json({ message: 'User updated successfully.', user: updatedUser });
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });

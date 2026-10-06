@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runInterestAccruals } from '@/lib/services/interest.js';
+import { runPawnAccruals } from '@/lib/services/pawn.js';
 import { logError } from '@/lib/logger.js';
 
 // This loops through every active loan sequentially, each one doing a
@@ -27,7 +28,12 @@ export async function GET(request) {
 
   try {
     const results = await runInterestAccruals();
-    return NextResponse.json({ message: 'Scheduled interest accrual completed.', results });
+    // Pawn loans accrue on the same schedule; a failure there must not hide the cash-loan results.
+    const pawnResults = await runPawnAccruals().catch((err) => {
+      logError('Cron pawn accrual error', err, { method: request.method, url: request.url });
+      return [{ status: 'error', error: err.message }];
+    });
+    return NextResponse.json({ message: 'Scheduled interest accrual completed.', results, pawnResults });
   } catch (error) {
     logError('Cron interest accrual error', error, { method: request.method, url: request.url });
     return NextResponse.json({ message: 'Interest accrual engine execution failed.' }, { status: 500 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runPaymentReminders, runMissedDailyCollectionAlerts } from '@/lib/services/reminders.js';
+import { runPawnReminders } from '@/lib/services/pawn.js';
 import { logError } from '@/lib/logger.js';
 
 // One real SMS API call per loan with interest due, sent sequentially —
@@ -21,9 +22,13 @@ export async function GET(request) {
   }
 
   try {
-    const [reminderResults, missedDailyResults] = await Promise.all([
+    const [reminderResults, missedDailyResults, pawnResults] = await Promise.all([
       runPaymentReminders(),
-      runMissedDailyCollectionAlerts()
+      runMissedDailyCollectionAlerts(),
+      runPawnReminders().catch((err) => {
+        logError('Cron pawn reminders error', err, { method: request.method, url: request.url });
+        return [{ status: 'error', error: err.message }];
+      })
     ]);
     return NextResponse.json({
       message: 'Scheduled payment reminders completed.',

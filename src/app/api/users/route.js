@@ -14,7 +14,7 @@ export async function GET(request) {
     const roleParam = request.nextUrl.searchParams.get('role');
     const roles = roleParam ? roleParam.split(',').map((r) => r.trim()).filter(Boolean) : null;
 
-    let query = db('users').select('id', 'name', 'email', 'phone', 'gender', 'role', 'is_active', 'must_change_password', 'finance_access', 'ticket_access', 'created_at');
+    let query = db('users').select('id', 'name', 'email', 'phone', 'gender', 'role', 'is_active', 'must_change_password', 'finance_access', 'ticket_access', 'pawn_access', 'created_at');
     if (roles && roles.length) query = query.whereIn('role', roles);
 
     const users = await query.orderBy('created_at', 'desc');

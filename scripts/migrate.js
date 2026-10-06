@@ -459,6 +459,117 @@ async function runIncrementalMigrations() {
       table.index(['status']);
     });
   }
+
+  // ---------------------------------------------------------------------
+  // Pawn Portal (Sabesh): vehicle / gold-jewellery pawn loans. Entirely
+  // separate tables and ledger accounts from the cash-loan system above —
+  // a pawn loan is secured by a physical item and has its own lifecycle
+  // (active -> redeemed -> item returned, or active -> forfeited), so it
+  // doesn't share the loans/transactions/ledger_entries tables.
+  // Defaults to false: nobody gets Pawn access until an admin turns it on.
+  // ---------------------------------------------------------------------
+  await addColumnIfMissing('users', 'pawn_access', (t) => t.boolean('pawn_access').notNullable().defaultTo(false));
+
+  if (!(await db.schema.hasTable('pawn_loans'))) {
+    await db.schema.createTable('pawn_loans', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.string('reference_number', 30).unique().notNullable(); // e.g. PWN-001
+      // Customer details (mirrors the paper pawn form)
+      table.string('customer_name', 150).notNullable();
+      table.string('father_husband_name', 150).nullable();
+      table.text('address').nullable();
+      table.string('nic_number', 20).notNullable();
+      table.string('mobile', 30).notNullable();
+      table.string('occupation', 150).nullable();
+      table.decimal('monthly_income', 15, 2).nullable();
+      table.string('reference_name', 150).nullable();
+      table.string('reference_phone', 30).nullable();
+      // Pawned item
+      table.string('pawn_type', 10).notNullable(); // 'vehicle' | 'gold'
+      table.text('item_description').notNullable();
+      table.string('make_model', 150).nullable();          // vehicles
+      table.string('registration_serial', 100).nullable(); // vehicles: reg no, gold: serial/tag
+      table.decimal('gold_weight_grams', 10, 3).nullable(); // gold only
+      table.string('gold_karat', 10).nullable();            // gold only, e.g. "22K"
+      table.decimal('estimated_value', 15, 2).notNullable(); // free-typed by the admin
+      table.string('storage_location', 150).nullable();
+      table.jsonb('item_photo_urls').nullable();
+      table.jsonb('document_photo_urls').nullable();
+      // Loan terms — interest works exactly like the cash loans (monthly
+      // rate; daily = /30, weekly = /4 — see calculateInterestPerPeriod)
+      table.decimal('principal_amount', 15, 2).notNullable();
+      table.decimal('interest_rate', 7, 3).notNullable(); // monthly %
+      table.string('interest_type', 10).notNullable().defaultTo('monthly'); // daily | weekly | monthly
+      table.integer('period_months').notNullable().defaultTo(1);
+      table.decimal('principal_outstanding', 15, 2).notNullable();
+      table.decimal('interest_balance', 15, 2).notNullable().defaultTo(0);
+      table.timestamp('start_date').notNullable().defaultTo(db.fn.now());
+      table.timestamp('due_date').notNullable();
+      table.timestamp('next_accrual_date').nullable();
+      table.timestamp('last_accrual_date').nullable();
+      table.string('status', 20).notNullable().defaultTo('active'); // active | redeemed | forfeited
+      table.timestamp('item_returned_at').nullable();
+      table.timestamp('forfeited_at').nullable();
+      table.text('forfeit_reason').nullable();
+      table.decimal('auction_proceeds', 15, 2).nullable();
+      table.decimal('surplus_due', 15, 2).nullable();
+      table.text('notes').nullable();
+      table.uuid('created_by').references('id').inTable('users').onDelete('SET NULL');
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.timestamp('updated_at').defaultTo(db.fn.now());
+      table.index('status');
+      table.index('due_date');
+      table.index('next_accrual_date');
+    });
+    console.log("Migration: created table 'pawn_loans'.");
+  }
+
+  if (!(await db.schema.hasTable('pawn_payments'))) {
+    await db.schema.createTable('pawn_payments', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('pawn_loan_id').notNullable().references('id').inTable('pawn_loans').onDelete('RESTRICT');
+      table.decimal('amount', 15, 2).notNullable();
+      table.string('payment_type', 20).notNullable(); // 'interest' | 'principal'
+      table.timestamp('payment_date').defaultTo(db.fn.now());
+      table.text('notes').nullable();
+      table.string('payment_method', 50).defaultTo('cash');
+      table.uuid('received_by').references('id').inTable('users').onDelete('SET NULL');
+      table.string('idempotency_key', 255).unique().notNullable();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.index('pawn_loan_id');
+    });
+    console.log("Migration: created table 'pawn_payments'.");
+  }
+
+  if (!(await db.schema.hasTable('pawn_interest_accruals'))) {
+    await db.schema.createTable('pawn_interest_accruals', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('pawn_loan_id').notNullable().references('id').inTable('pawn_loans').onDelete('RESTRICT');
+      table.decimal('amount_accrued', 15, 2).notNullable();
+      table.text('calculation_log').notNullable();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.index('pawn_loan_id');
+    });
+    console.log("Migration: created table 'pawn_interest_accruals'.");
+  }
+
+  // The pawn portal's own double-entry ledger (accounts: pawn_cash,
+  // pawn_receivable_principal, pawn_receivable_interest, pawn_interest_revenue,
+  // pawn_written_off_expense, pawn_surplus_payable).
+  if (!(await db.schema.hasTable('pawn_ledger_entries'))) {
+    await db.schema.createTable('pawn_ledger_entries', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('pawn_loan_id').references('id').inTable('pawn_loans').onDelete('RESTRICT');
+      table.uuid('pawn_payment_id').references('id').inTable('pawn_payments').onDelete('SET NULL');
+      table.string('account', 40).notNullable();
+      table.string('type', 10).notNullable(); // 'debit' | 'credit'
+      table.decimal('amount', 15, 2).notNullable();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.index('pawn_loan_id');
+      table.index('account');
+    });
+    console.log("Migration: created table 'pawn_ledger_entries'.");
+  }
 }
 
 async function createSchemaAndSeed() {

@@ -33,7 +33,7 @@ export async function requireAuth(request, allowedRoles = []) {
     throw new AuthError(401, 'Authentication token required or invalid/expired.');
   }
 
-  const dbUser = await db('users').where({ id: tokenUser.id }).select('id', 'name', 'phone', 'role', 'is_active', 'finance_access', 'ticket_access').first();
+  const dbUser = await db('users').where({ id: tokenUser.id }).select('id', 'name', 'phone', 'role', 'is_active', 'finance_access', 'ticket_access', 'pawn_access').first();
   if (!dbUser || !dbUser.is_active) {
     throw new AuthError(401, 'Account is inactive or no longer exists. Please contact your administrator.');
   }
@@ -44,5 +44,5 @@ export async function requireAuth(request, allowedRoles = []) {
     throw new AuthError(403, `Forbidden. This action requires one of these roles: [${allowedRoles.join(', ')}]. Your role: '${dbUser.role}'`);
   }
 
-  return { id: dbUser.id, name: dbUser.name, phone: dbUser.phone, role: dbUser.role, finance_access: !!dbUser.finance_access, ticket_access: !!dbUser.ticket_access };
+  return { id: dbUser.id, name: dbUser.name, phone: dbUser.phone, role: dbUser.role, finance_access: !!dbUser.finance_access, ticket_access: !!dbUser.ticket_access, pawn_access: !!dbUser.pawn_access };
 }
