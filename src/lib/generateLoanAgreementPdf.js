@@ -112,7 +112,7 @@ export async function downloadLoanAgreementPdf(loanStatement, orgSettings = {}) 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...COLORS.muted);
-  doc.text(`Ref: ${loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}`, pageWidth - marginX, y + 22, { align: 'right' });
+  doc.text(`Ref: ${loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}`, pageWidth - marginX, y + 22, { align: 'right' });
   doc.text(`Date: ${new Date(loan.created_at).toLocaleDateString()}`, pageWidth - marginX, y + 37, { align: 'right' });
 
   y += 66;
@@ -270,7 +270,7 @@ export async function downloadLoanAgreementPdf(loanStatement, orgSettings = {}) 
 
   drawFooter();
 
-  const fileRef = loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`;
+  const fileRef = loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`;
   const safeBorrowerName = (loan.borrower_name || 'Borrower').replace(/[^a-z0-9]+/gi, '-');
   doc.save(`Loan-Agreement-${fileRef}-${safeBorrowerName}.pdf`);
 }

@@ -5,7 +5,7 @@ import { api } from '@/lib/apiClient.js';
 import { submitPaymentOrQueue, syncQueuedPayments, getQueueCount, onQueueChanged } from '@/lib/offlineQueue.js';
 import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
-import { Gem } from 'lucide-react';
+import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
   Home, Banknote, ClipboardList, Users, Landmark, KeyRound, LogOut,
   ArrowLeft, ArrowRight, ScrollText, Check, X, Phone, IdCard, ShieldCheck,
@@ -181,6 +181,13 @@ function portalHomeFor(u) {
   if (u.role === 'admin' && u.pawn_access) portals.push('pawn-dashboard');
   return portals.length === 1 ? portals[0] : 'portal';
 }
+// "YYYY-MM-DD" in the browser's local time (what a <date> value should be).
+function toDateInputValue(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function canSwitchPortals(u) {
   return [u.finance_access !== false, u.ticket_access !== false, u.role === 'admin' && u.pawn_access === true].filter(Boolean).length > 1;
 }
@@ -315,8 +322,10 @@ export default function LendApp() {
   const [bulkAddingMembers, setBulkAddingMembers] = useState(false);
   const [auctionForm, setAuctionForm] = useState({ bid_amount: '', winner_member_id: '', auction_date: new Date().toISOString().slice(0, 10), next_round_date: '' });
   const [ticketPaymentFilterRound, setTicketPaymentFilterRound] = useState('');
-  const [editingMemberCount, setEditingMemberCount] = useState(false);
-  const [memberCountInput, setMemberCountInput] = useState('');
+  const [editTicketForm, setEditTicketForm] = useState(null); // null = closed
+  const [editMemberForm, setEditMemberForm] = useState(null); // null = closed: { id, name, phone }
+  const [editRoundForm, setEditRoundForm] = useState(null); // null = closed: { id, round_number, auction_date, winner_member_id }
+  const [ticketDialogError, setTicketDialogError] = useState('');
   const [assigningWinnerFor, setAssigningWinnerFor] = useState(null); // auction id currently being edited, or null
   const [assignWinnerMemberId, setAssignWinnerMemberId] = useState('');
 
@@ -361,11 +370,13 @@ export default function LendApp() {
     (config.fields || []).forEach(f => { initial[f.key] = f.initialValue ?? ''; });
     setActionModalValues(initial);
     setActionModalError('');
+    setActionModalSubmitting(false);
   };
   const closeActionModal = () => {
     setActionModal(null);
     setActionModalValues({});
     setActionModalError('');
+    setActionModalSubmitting(false);
   };
   const handleActionModalConfirm = async () => {
     if (!actionModal) return;
@@ -1504,7 +1515,7 @@ export default function LendApp() {
   // round, all payment tracking — see the DELETE route's comment). Typing
   // the exact name is a higher bar than a plain confirm dialog on purpose,
   // given how much gets wiped in one action.
-  const handleDeleteTicket = (ticket, e) => {
+  const handleDeleteTicket = (ticket, e, { leaveDetail = false } = {}) => {
     if (e) e.stopPropagation();
     openActionModal({
       title: `Delete '${ticket.name}'`,
@@ -1515,25 +1526,130 @@ export default function LendApp() {
       onConfirm: async () => {
         await api.delete(`/tickets/${ticket.id}`);
         showToast(`'${ticket.name}' deleted.`);
+        if (leaveDetail) { setSelectedTicketIdState(null); setSelectedTicket(null); }
         fetchTickets();
       },
     });
   };
 
-  const handleUpdateMemberCount = async () => {
-    const newCount = parseInt(memberCountInput, 10);
-    if (isNaN(newCount) || newCount <= 0) {
-      showToast('Enter a valid member count.', 'error');
-      return;
-    }
+  // ---- Chit group / member / round editing ----
+  const openEditTicket = (ticket, e) => {
+    if (e) e.stopPropagation();
+    setTicketDialogError('');
+    setEditTicketForm({
+      id: ticket.id,
+      name: ticket.name || '',
+      total_value: String(parseFloat(ticket.total_value)),
+      member_count: String(ticket.member_count),
+      start_date: toDateInputValue(ticket.start_date),
+      next_round_date: toDateInputValue(ticket.next_round_date),
+      host_fee_type: ticket.host_fee_type,
+      host_fee_value: String(parseFloat(ticket.host_fee_value)),
+      roundsRun: ticket.status === 'completed' ? ticket.member_count : ticket.current_round - 1,
+      rosterCount: selectedTicket && selectedTicket.id === ticket.id ? ticketMembers.length : null
+    });
+  };
+
+  const handleSaveTicketEdit = async (e) => {
+    e.preventDefault();
+    const f = editTicketForm;
+    if (!f) return;
+    setTicketDialogError('');
+    setLoading(true);
     try {
-      const updated = await api.patch(`/tickets/${selectedTicket.id}`, { member_count: newCount });
-      setSelectedTicket(updated);
-      setEditingMemberCount(false);
-      showToast(`Member count increased to ${newCount}. You can now add more members and run additional rounds.`);
+      const updated = await api.patch(`/tickets/${f.id}`, {
+        name: f.name,
+        total_value: parseFloat(f.total_value),
+        member_count: parseInt(f.member_count, 10),
+        start_date: f.start_date || undefined,
+        next_round_date: f.next_round_date || null,
+        host_fee_type: f.host_fee_type,
+        host_fee_value: parseFloat(f.host_fee_value)
+      });
+      showToast(`'${updated.name}' updated.`);
+      setEditTicketForm(null);
+      if (selectedTicketIdState === f.id) fetchTicketDetails(f.id); else fetchTickets();
     } catch (err) {
-      showToast(err.message || 'Could not update member count.', 'error');
+      setTicketDialogError(err.message === 'Nothing to update.' ? 'No changes to save.' : err.message);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const openEditMember = (m) => {
+    setTicketDialogError('');
+    setEditMemberForm({ id: m.id, name: m.name || '', phone: m.phone || '' });
+  };
+
+  const handleSaveMemberEdit = async (e) => {
+    e.preventDefault();
+    const f = editMemberForm;
+    if (!f || !selectedTicket) return;
+    setTicketDialogError('');
+    setLoading(true);
+    try {
+      await api.patch(`/tickets/${selectedTicket.id}/members/${f.id}`, { name: f.name, phone: f.phone });
+      showToast(`Member '${f.name}' updated.`);
+      setEditMemberForm(null);
+      fetchTicketDetails(selectedTicket.id);
+    } catch (err) {
+      setTicketDialogError(err.message === 'Nothing to update.' ? 'No changes to save.' : err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveTicketMember = (m) => {
+    openActionModal({
+      title: `Remove ${m.name}`,
+      message: 'Removes this member from the group roster. Any unpaid payment records for past rounds are removed with them. This is refused if they already won a round or have payments marked as paid.',
+      confirmLabel: 'Remove Member',
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/tickets/${selectedTicket.id}/members/${m.id}`);
+        showToast(`${m.name} removed from the group.`);
+        fetchTicketDetails(selectedTicket.id);
+      },
+    });
+  };
+
+  const isLatestRound = (a) => ticketAuctions.every(x => x.round_number <= a.round_number);
+
+  const openEditRound = (a) => {
+    setTicketDialogError('');
+    setEditRoundForm({ id: a.id, round_number: a.round_number, auction_date: toDateInputValue(a.auction_date), winner_member_id: a.winner_member_id || '' });
+  };
+
+  const handleSaveRoundEdit = async (e) => {
+    e.preventDefault();
+    const f = editRoundForm;
+    if (!f || !selectedTicket) return;
+    setTicketDialogError('');
+    setLoading(true);
+    try {
+      await api.patch(`/tickets/${selectedTicket.id}/auctions/${f.id}`, { winner_member_id: f.winner_member_id || null, auction_date: f.auction_date });
+      showToast(`Round ${f.round_number} updated.`);
+      setEditRoundForm(null);
+      fetchTicketDetails(selectedTicket.id);
+    } catch (err) {
+      setTicketDialogError(err.message === 'Nothing to update.' ? 'No changes to save.' : err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUndoRound = (a) => {
+    openActionModal({
+      title: `Undo round ${a.round_number}`,
+      message: 'Removes this round and its payment tracking so you can run it again with the right figures (for example a wrong bid). Refused if any payment for this round is already marked paid.',
+      confirmLabel: 'Undo Round',
+      danger: true,
+      onConfirm: async () => {
+        const res = await api.delete(`/tickets/${selectedTicket.id}/auctions/${a.id}`);
+        showToast(res.message);
+        fetchTicketDetails(selectedTicket.id);
+      },
+    });
   };
 
   const handleAssignAuctionWinner = async (auctionId) => {
@@ -2399,6 +2515,9 @@ export default function LendApp() {
   useEscapeToClose(!!editingUser, () => setEditingUser(null));
   useEscapeToClose(showMoreMenu, () => setShowMoreMenu(false));
   useEscapeToClose(!!actionModal, closeActionModal);
+  useEscapeToClose(!!editTicketForm, () => setEditTicketForm(null));
+  useEscapeToClose(!!editMemberForm, () => setEditMemberForm(null));
+  useEscapeToClose(!!editRoundForm, () => setEditRoundForm(null));
 
   // Keyboard focus is trapped inside whichever modal is open and restored
   // to the triggering element on close — see useFocusTrap's own comment.
@@ -2412,6 +2531,9 @@ export default function LendApp() {
   const editingUserModalRef = useRef(null);
   const moreMenuModalRef = useRef(null);
   const actionModalRef = useRef(null);
+  const editTicketModalRef = useRef(null);
+  const editMemberModalRef = useRef(null);
+  const editRoundModalRef = useRef(null);
   useFocusTrap(!!selectedReceipt, receiptModalRef);
   useFocusTrap(showLoanAgreement, loanAgreementModalRef);
   useFocusTrap(showChangePassword, changePasswordModalRef);
@@ -2421,6 +2543,9 @@ export default function LendApp() {
   useFocusTrap(!!editingUser, editingUserModalRef);
   useFocusTrap(showMoreMenu, moreMenuModalRef);
   useFocusTrap(!!actionModal, actionModalRef);
+  useFocusTrap(!!editTicketForm, editTicketModalRef);
+  useFocusTrap(!!editMemberForm, editMemberModalRef);
+  useFocusTrap(!!editRoundForm, editRoundModalRef);
 
   return (
     <div>
@@ -3567,6 +3692,18 @@ export default function LendApp() {
                       const originalShare = totalVal / t.member_count;
                       return (
                         <div key={t.id} className="glass-card" style={{ cursor: 'pointer', transition: 'transform 0.2s', padding: '24px', position: 'relative' }} onClick={() => fetchTicketDetails(t.id)}>
+                          {user.role === 'admin' && (
+                            <button
+                              type="button"
+                              className="glass-btn glass-btn-secondary"
+                              style={{ position: 'absolute', top: '14px', right: '58px', padding: '5px 9px', fontSize: '11px' }}
+                              onClick={(e) => openEditTicket(t, e)}
+                              title={`Edit '${t.name}'`}
+                              aria-label={`Edit ${t.name}`}
+                            >
+                              <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="glass-btn glass-btn-rose"
@@ -3576,7 +3713,7 @@ export default function LendApp() {
                           >
                             <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
                           </button>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '36px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '88px' }}>
                             <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>{t.name}</h3>
                             <span className={`status-pill ${t.status === 'active' ? 'status-pill-active' : 'status-pill-paid'}`}>
                               <span className="status-pill-dot" />{t.status === 'active' ? 'Active' : 'Completed'}
@@ -3621,7 +3758,17 @@ export default function LendApp() {
                   <button className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px' }} onClick={() => { setSelectedTicketIdState(null); setSelectedTicket(null); fetchTickets(); }}>
                     <ArrowLeft className="icon" /> Back to Groups List
                   </button>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {user.role === 'admin' && (
+                      <>
+                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => openEditTicket(selectedTicket)}>
+                          <Pencil className="icon" /> Edit Group
+                        </button>
+                        <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={(e) => handleDeleteTicket(selectedTicket, e, { leaveDetail: true })}>
+                          <Trash2 className="icon" /> Delete Group
+                        </button>
+                      </>
+                    )}
                     <span className="badge badge-active" style={{ background: 'var(--accent-emerald-light)', color: 'var(--accent-emerald)', padding: '6px 12px' }}>Total LKR {parseFloat(selectedTicket.total_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
@@ -3629,31 +3776,7 @@ export default function LendApp() {
                 <div className="glass-card" style={{ padding: '24px' }}>
                   <h2 style={{ fontSize: '26px', margin: '0 0 6px 0' }}>{selectedTicket.name}</h2>
                   <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {editingMemberCount ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        Members: <strong>{ticketMembers.length} /</strong>
-                        <input
-                          type="number" min={selectedTicket.member_count + 1} autoFocus
-                          className="glass-input" style={{ width: '70px', padding: '4px 8px', fontSize: '13px' }}
-                          value={memberCountInput} onChange={e => setMemberCountInput(e.target.value)}
-                        />
-                        <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={handleUpdateMemberCount}>Save</button>
-                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setEditingMemberCount(false)}>Cancel</button>
-                      </span>
-                    ) : (
-                      <span>
-                        Members: <strong>{ticketMembers.length} / {selectedTicket.member_count}</strong>
-                        <button
-                          type="button"
-                          className="glass-btn glass-btn-secondary"
-                          style={{ padding: '2px 8px', fontSize: '10px', marginLeft: '8px' }}
-                          onClick={() => { setMemberCountInput(String(selectedTicket.member_count + 1)); setEditingMemberCount(true); }}
-                          title="Increase member count — adds more rounds to the group"
-                        >
-                          <UserPlus className="icon" style={{ width: '11px', height: '11px' }} /> Increase
-                        </button>
-                      </span>
-                    )}
+                    <span>Members: <strong>{ticketMembers.length} / {selectedTicket.member_count}</strong></span>
                     <span>•</span>
                     <span>Start: <strong>{new Date(selectedTicket.start_date).toLocaleDateString()}</strong></span>
                     <span>•</span>
@@ -3908,6 +4031,16 @@ export default function LendApp() {
                                     <span className="badge badge-defaulted" style={{ fontSize: '11px' }}>Not Won</span>
                                   )}
                                 </div>
+                                {user.role === 'admin' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginLeft: '10px' }}>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => openEditMember(m)} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`}>
+                                      <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
+                                    </button>
+                                    <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => handleRemoveTicketMember(m)} title={`Remove ${m.name}`} aria-label={`Remove ${m.name}`}>
+                                      <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -4053,7 +4186,7 @@ export default function LendApp() {
                                         <button className="glass-btn btn-whatsapp" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
                                           const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
                                           const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
-                                          const txt = `*STN CHIT FUND - PAYMENT REMINDER*\n\n` +
+                                          const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
                                             `Group: *${selectedTicket.name}*\n` +
                                             `Round: *Round ${p.round_number}*\n` +
                                             `Amount Due: *LKR ${auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
@@ -4114,7 +4247,7 @@ export default function LendApp() {
                                     <button className="glass-btn btn-whatsapp" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => {
                                       const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
                                       const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
-                                      const txt = `*STN CHIT FUND - PAYMENT REMINDER*\n\n` +
+                                      const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
                                         `Group: *${selectedTicket.name}*\n` +
                                         `Round: *Round ${p.round_number}*\n` +
                                         `Amount Due: *LKR ${auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
@@ -4152,6 +4285,7 @@ export default function LendApp() {
                                 <th>Payout to Winner</th>
                                 <th>Repayment / Member</th>
                                 <th>Host Fee Collected</th>
+                                {user.role === 'admin' && <th>Actions</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -4184,6 +4318,14 @@ export default function LendApp() {
                                   <td style={{ color: 'var(--accent-emerald)', fontWeight: 'bold' }}>LKR {parseFloat(a.winner_payout).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td>LKR {parseFloat(a.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td>LKR {(parseFloat(a.host_fee_per_member) * selectedTicket.member_count).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  {user.role === 'admin' && (
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => openEditRound(a)}><Pencil className="icon" style={{ width: '12px', height: '12px' }} /> Edit</button>
+                                        {isLatestRound(a) && <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => handleUndoRound(a)}><Undo2 className="icon" style={{ width: '12px', height: '12px' }} /> Undo</button>}
+                                      </div>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -4230,6 +4372,16 @@ export default function LendApp() {
 
                                 <span className="mobile-row-card-label">Host Fee</span>
                                 <span className="mobile-row-card-value">LKR {(parseFloat(a.host_fee_per_member) * selectedTicket.member_count).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+
+                                {user.role === 'admin' && (
+                                  <>
+                                    <span className="mobile-row-card-label">Actions</span>
+                                    <span className="mobile-row-card-value" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                      <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => openEditRound(a)}><Pencil className="icon" style={{ width: '12px', height: '12px' }} /> Edit</button>
+                                      {isLatestRound(a) && <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => handleUndoRound(a)}><Undo2 className="icon" style={{ width: '12px', height: '12px' }} /> Undo</button>}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -4241,6 +4393,129 @@ export default function LendApp() {
               </>
             )}
 
+
+            {/* ---- Edit chit group ---- */}
+            {editTicketForm && (
+              <div className="receipt-modal-overlay" onClick={() => setEditTicketForm(null)}>
+                <div ref={editTicketModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit chit group" className="glass-card" style={{ maxWidth: '560px', width: '92%', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '20px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><Pencil className="icon" /> Edit Chit Group</h3>
+                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setEditTicketForm(null)}>Close</button>
+                  </div>
+                  <form onSubmit={handleSaveTicketEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label htmlFor="et-name" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Group Name *</label>
+                      <input id="et-name" required type="text" maxLength={100} className="glass-input" value={editTicketForm.name} onChange={e => setEditTicketForm(p => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <div>
+                        <label htmlFor="et-total" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Total Value (LKR) *</label>
+                        <input id="et-total" required type="number" inputMode="decimal" min="1" step="0.01" className="glass-input" value={editTicketForm.total_value} onChange={e => setEditTicketForm(p => ({ ...p, total_value: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label htmlFor="et-members" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Member Count *</label>
+                        <input id="et-members" required type="number" inputMode="numeric" min={Math.max(1, editTicketForm.roundsRun, editTicketForm.rosterCount || 0)} className="glass-input" value={editTicketForm.member_count} onChange={e => setEditTicketForm(p => ({ ...p, member_count: e.target.value }))} />
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '-6px' }}>
+                      The member count is also the number of rounds. It can't go below the rounds already run ({editTicketForm.roundsRun}){editTicketForm.rosterCount !== null ? ` or the members on the roster (${editTicketForm.rosterCount})` : ' or the members already on the roster'}.
+                    </span>
+                    <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <div>
+                        <label htmlFor="et-start" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Start Date *</label>
+                        <TypedDateInput id="et-start" required value={editTicketForm.start_date} onChange={e => setEditTicketForm(p => ({ ...p, start_date: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label htmlFor="et-next" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Next Round Date (optional)</label>
+                        <TypedDateInput id="et-next" value={editTicketForm.next_round_date} onChange={e => setEditTicketForm(p => ({ ...p, next_round_date: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <div>
+                        <label htmlFor="et-feetype" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Host Fee Calculation *</label>
+                        <select id="et-feetype" className="glass-input" value={editTicketForm.host_fee_type} onChange={e => setEditTicketForm(p => ({ ...p, host_fee_type: e.target.value }))}>
+                          <option value="percentage">Percentage (on original share)</option>
+                          <option value="fixed">Fixed Fee (per member)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="et-feeval" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>{editTicketForm.host_fee_type === 'percentage' ? 'Host Fee (%) *' : 'Fixed Fee (LKR) *'}</label>
+                        <input id="et-feeval" required type="number" inputMode="decimal" step="0.01" min="0" className="glass-input" value={editTicketForm.host_fee_value} onChange={e => setEditTicketForm(p => ({ ...p, host_fee_value: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div role="note" style={{ background: 'var(--bg-tertiary)', borderLeft: '4px solid var(--accent-amber)', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', lineHeight: 1.5 }}>
+                      <strong>Changing the total value or host fee only affects rounds that haven't been run yet.</strong> Rounds already run keep the amounts that were collected. To redo a round that was run with wrong figures, use <em>Undo</em> on the latest round in Past Auctions History, then run it again.
+                    </div>
+                    {parseFloat(editTicketForm.total_value) > 0 && parseInt(editTicketForm.member_count, 10) > 0 && (() => {
+                      const share = parseFloat(editTicketForm.total_value) / parseInt(editTicketForm.member_count, 10);
+                      const fee = editTicketForm.host_fee_type === 'percentage' ? share * ((parseFloat(editTicketForm.host_fee_value) || 0) / 100) : (parseFloat(editTicketForm.host_fee_value) || 0);
+                      return (
+                        <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-light)', borderRadius: '12px', padding: '14px', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: 'var(--text-secondary)' }}>Original share per member (new rounds):</span><strong style={{ color: 'var(--accent-blue)' }}>LKR {share.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Host fee per member (new rounds):</span><strong>LKR {fee.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                        </div>
+                      );
+                    })()}
+                    {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
+                    <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Changes'}</button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ---- Edit member ---- */}
+            {editMemberForm && (
+              <div className="receipt-modal-overlay" onClick={() => setEditMemberForm(null)}>
+                <div ref={editMemberModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit member" className="glass-card" style={{ maxWidth: '440px', width: '92%', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '20px', margin: 0 }}>Edit Member</h3>
+                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setEditMemberForm(null)}>Close</button>
+                  </div>
+                  <form onSubmit={handleSaveMemberEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label htmlFor="em-name" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Full Name *</label>
+                      <input id="em-name" required type="text" maxLength={100} className="glass-input" value={editMemberForm.name} onChange={e => setEditMemberForm(p => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label htmlFor="em-phone" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Phone Number</label>
+                      <input id="em-phone" type="tel" maxLength={20} className="glass-input" value={editMemberForm.phone} onChange={e => setEditMemberForm(p => ({ ...p, phone: e.target.value }))} />
+                    </div>
+                    {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
+                    <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Member'}</button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ---- Edit round (winner / date) ---- */}
+            {editRoundForm && (
+              <div className="receipt-modal-overlay" onClick={() => setEditRoundForm(null)}>
+                <div ref={editRoundModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit round" className="glass-card" style={{ maxWidth: '460px', width: '92%', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '20px', margin: 0 }}>Edit Round {editRoundForm.round_number}</h3>
+                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setEditRoundForm(null)}>Close</button>
+                  </div>
+                  <form onSubmit={handleSaveRoundEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label htmlFor="er-date" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Auction Date *</label>
+                      <TypedDateInput id="er-date" required value={editRoundForm.auction_date} onChange={e => setEditRoundForm(p => ({ ...p, auction_date: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label htmlFor="er-winner" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Round Winner</label>
+                      <select id="er-winner" className="glass-input" value={editRoundForm.winner_member_id} onChange={e => setEditRoundForm(p => ({ ...p, winner_member_id: e.target.value }))}>
+                        <option value="">— No winner yet —</option>
+                        {ticketMembers.filter(m => m.id === editRoundForm.winner_member_id || !ticketAuctions.some(au => au.winner_member_id === m.id)).map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Members who already won another round aren't listed. The bid and the amounts for this round don't change — to fix a wrong bid, undo the latest round and run it again.</span>
+                    </div>
+                    {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
+                    <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Round'}</button>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -5349,7 +5624,7 @@ export default function LendApp() {
                                   const diffDays = Math.floor((now - lastAcc) / (1000 * 60 * 60 * 24));
                                   return (
                                     <tr key={l.id}>
-                                      <td style={{ fontWeight: 'bold' }}>{l.reference_number || `STN-${String(l.id).padStart(3, '0')}`}</td>
+                                      <td style={{ fontWeight: 'bold' }}>{l.reference_number || `LN-${String(l.id).padStart(3, '0')}`}</td>
                                       <td>
                                         <strong>{l.borrower_name}</strong>
                                         <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }}>{l.borrower_phone}</span>
@@ -5391,7 +5666,7 @@ export default function LendApp() {
                                     <span className="mobile-row-card-title">{l.borrower_name}</span>
                                     <span className="badge badge-defaulted">{diffDays}d overdue</span>
                                   </div>
-                                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{l.borrower_phone} · {l.reference_number || `STN-${String(l.id).padStart(3, '0')}`}</span>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{l.borrower_phone} · {l.reference_number || `LN-${String(l.id).padStart(3, '0')}`}</span>
                                   <div className="mobile-row-card-grid">
                                     <span className="mobile-row-card-label">Category</span>
                                     <span className="mobile-row-card-value" style={{ textTransform: 'capitalize' }}>{l.interest_type}</span>
@@ -9989,7 +10264,7 @@ function RecordDailyPaymentsTab({ loans = [], onRefresh, showToast }) {
                     <tr key={loan.id} style={{ transition: 'background-color 0.15s ease' }}>
                       <td style={{ whiteSpace: 'nowrap', fontWeight: 'bold' }}>
                         <span style={{ color: 'var(--accent-blue)', background: 'rgba(37, 84, 232, 0.08)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px' }}>
-                          {loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}
+                          {loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}
                         </span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
@@ -10023,7 +10298,7 @@ function RecordDailyPaymentsTab({ loans = [], onRefresh, showToast }) {
                           )}
                           {cleanPhone && (
                             <a
-                              href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, this is a reminder regarding your loan payment of LKR ${totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })} due today (${loan.reference_number || `STN-${loan.id}`}). Thank you.`)}`}
+                              href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, this is a reminder regarding your loan payment of LKR ${totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })} due today (${loan.reference_number || `LN-${loan.id}`}). Thank you.`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{ color: '#25D366', display: 'inline-flex', alignItems: 'center', padding: '2px 4px' }}
@@ -10129,7 +10404,7 @@ function RecordDailyPaymentsTab({ loans = [], onRefresh, showToast }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                     <div>
                       <span style={{ color: 'var(--accent-blue)', background: 'rgba(37, 84, 232, 0.08)', padding: '2px 7px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>
-                        {loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}
+                        {loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}
                       </span>
                       <strong style={{ display: 'block', fontSize: '15px', marginTop: '4px' }}>
                         {loan.borrower_name}
@@ -10178,7 +10453,7 @@ function RecordDailyPaymentsTab({ loans = [], onRefresh, showToast }) {
                         <Phone style={{ width: '15px', height: '15px' }} /> Call Now ({loan.borrower_phone})
                       </a>
                       <a
-                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, this is a reminder regarding your loan payment of LKR ${totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })} due today (${loan.reference_number || `STN-${loan.id}`}). Please arrange payment at your earliest convenience.`)}`}
+                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, this is a reminder regarding your loan payment of LKR ${totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })} due today (${loan.reference_number || `LN-${loan.id}`}). Please arrange payment at your earliest convenience.`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="glass-btn"
@@ -10301,7 +10576,7 @@ function RecordDailyPaymentsTab({ loans = [], onRefresh, showToast }) {
                       <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <CircleCheck className="icon" style={{ width: '14px', height: '14px', color: 'var(--accent-emerald)' }} />
                         <strong>{loan.borrower_name}</strong>
-                        <span style={{ color: 'var(--text-muted)' }}>{loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}</span>
                       </span>
                       <span style={{ color: 'var(--text-secondary)' }}>{loan.borrower_phone}</span>
                     </div>
@@ -10520,7 +10795,7 @@ function NextDayTasklistTab({ loans = [], onSelectLoan, onNavigateRecordPayment 
                     <tr key={loan.id}>
                       <td style={{ whiteSpace: 'nowrap', fontWeight: 'bold' }}>
                         <span style={{ color: 'var(--accent-blue)', background: 'rgba(37, 84, 232, 0.08)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px' }}>
-                          {loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}
+                          {loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}
                         </span>
                       </td>
                       <td>
@@ -10534,7 +10809,7 @@ function NextDayTasklistTab({ loans = [], onSelectLoan, onNavigateRecordPayment 
                             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><Phone className="icon" /> {loan.borrower_phone || 'No phone'}</span>
                           )}
                           {cleanPhone && (
-                            <a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, reminder regarding your loan payment of LKR ${Math.round(expectedAmt).toLocaleString(undefined, { minimumFractionDigits: 2 })} due (${loan.reference_number || `STN-${loan.id}`}).`)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#25D366', display: 'inline-flex', alignItems: 'center' }} title="WhatsApp Reminder">
+                            <a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Hello ${loan.borrower_name}, reminder regarding your loan payment of LKR ${Math.round(expectedAmt).toLocaleString(undefined, { minimumFractionDigits: 2 })} due (${loan.reference_number || `LN-${loan.id}`}).`)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#25D366', display: 'inline-flex', alignItems: 'center' }} title="WhatsApp Reminder">
                               <MessageSquare style={{ width: '12px', height: '12px' }} />
                             </a>
                           )}
@@ -10589,7 +10864,7 @@ function NextDayTasklistTab({ loans = [], onSelectLoan, onNavigateRecordPayment 
                   <div className="mobile-row-card-header">
                     <span className="mobile-row-card-title">{loan.borrower_name}</span>
                     <span style={{ color: 'var(--accent-blue)', background: 'rgba(37, 84, 232, 0.08)', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold' }}>
-                      {loan.reference_number || `STN-${String(loan.id).padStart(3, '0')}`}
+                      {loan.reference_number || `LN-${String(loan.id).padStart(3, '0')}`}
                     </span>
                   </div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><Phone className="icon" style={{ width: '12px', height: '12px' }} /> {loan.borrower_phone || 'No phone'}</span>

@@ -61,6 +61,13 @@ export async function POST(request, { params }) {
     const totalVal = parseFloat(ticket.total_value);
     const memberCount = parseInt(ticket.member_count, 10);
 
+    if (isNaN(bidVal) || bidVal < 0) {
+      return NextResponse.json({ message: 'Bid amount must be zero or more.' }, { status: 400 });
+    }
+    if (bidVal > totalVal) {
+      return NextResponse.json({ message: `Bid amount (LKR ${bidVal.toLocaleString()}) cannot be more than the group's total value (LKR ${totalVal.toLocaleString()}).` }, { status: 400 });
+    }
+
     // Financial Calculations
     const winner_payout = totalVal - bidVal;
     const base_payment = winner_payout / memberCount;

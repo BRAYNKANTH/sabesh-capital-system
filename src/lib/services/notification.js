@@ -197,7 +197,7 @@ ${orgName}`;
 
     if (admin) {
       const agentName = agent ? agent.name : 'Unknown';
-      const adminMsg = `STN Alert: Collection of LKR ${formattedAmount} (${kind}) from ${borrower.name} recorded by Agent ${agentName}. Remaining Principal: LKR ${Number(principalOutstanding).toLocaleString()}, Remaining Interest: LKR ${Number(interestBalance).toLocaleString()}.`;
+      const adminMsg = `${orgName} Alert: Collection of LKR ${formattedAmount} (${kind}) from ${borrower.name} recorded by Agent ${agentName}. Remaining Principal: LKR ${Number(principalOutstanding).toLocaleString()}, Remaining Interest: LKR ${Number(interestBalance).toLocaleString()}.`;
       await sendNotification({
         recipientName: admin.name,
         phone: admin.phone,
