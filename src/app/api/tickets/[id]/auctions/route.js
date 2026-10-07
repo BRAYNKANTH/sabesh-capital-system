@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
     const auctions = await db('ticket_auctions')
       .leftJoin('ticket_members', 'ticket_auctions.winner_member_id', 'ticket_members.id')
       .where('ticket_auctions.ticket_id', id)
-      .select('ticket_auctions.*', 'ticket_members.name as winner_name')
+      .select('ticket_auctions.*', 'ticket_members.name as winner_name', 'ticket_members.phone as winner_phone')
       .orderBy('round_number', 'asc');
 
     return NextResponse.json(auctions);

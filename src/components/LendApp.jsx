@@ -188,6 +188,17 @@ function toDateInputValue(v) {
   if (isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// A phone number that calls when tapped (opens the phone's dialler on a mobile).
+function PhoneLink({ phone, showIcon = true }) {
+  const dial = (phone || '').replace(/[^0-9+]/g, '');
+  if (!dial) return null;
+  return (
+    <a href={`tel:${dial}`} className="phone-link" aria-label={`Call ${phone}`} onClick={(e) => e.stopPropagation()}>
+      {showIcon && <Phone className="icon" style={{ width: '13px', height: '13px' }} aria-hidden="true" />}
+      {phone}
+    </a>
+  );
+}
 function canSwitchPortals(u) {
   return [u.finance_access !== false, u.ticket_access !== false, u.role === 'admin' && u.pawn_access === true].filter(Boolean).length > 1;
 }
@@ -4012,12 +4023,12 @@ export default function LendApp() {
                                   <strong style={{ display: 'block', fontSize: '14px' }}>{idx + 1}. {m.name}</strong>
                                   {m.phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                      <span><Phone className="icon" style={{ width: '12px', height: '12px' }} /> {m.phone}</span>
+                                      <PhoneLink phone={m.phone} />
                                       <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                                        <a href={`tel:${m.phone}`} className="quick-contact-btn phone" title="Call Member" style={{ color: 'var(--accent-blue)' }}>
+                                        <a href={`tel:${m.phone}`} className="quick-contact-btn phone" title="Call Member">
                                           <Phone style={{ width: '11px', height: '11px' }} />
                                         </a>
-                                        <a href={`https://wa.me/${(m.phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (m.phone || '').replace(/[^0-9]/g, '').slice(1) : (m.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp" style={{ color: '#25D366' }}>
+                                        <a href={`https://wa.me/${(m.phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (m.phone || '').replace(/[^0-9]/g, '').slice(1) : (m.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp">
                                           <MessageSquare style={{ width: '11px', height: '11px' }} />
                                         </a>
                                       </span>
@@ -4152,12 +4163,12 @@ export default function LendApp() {
                                     <td>
                                       {p.member_phone ? (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <span>{p.member_phone}</span>
+                                          <PhoneLink phone={p.member_phone} showIcon={false} />
                                           <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                                            <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call" style={{ color: 'var(--accent-blue)' }}>
+                                            <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call">
                                               <Phone style={{ width: '11px', height: '11px' }} />
                                             </a>
-                                            <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" style={{ color: '#25D366' }}>
+                                            <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp">
                                               <MessageSquare style={{ width: '11px', height: '11px' }} />
                                             </a>
                                           </span>
@@ -4219,12 +4230,12 @@ export default function LendApp() {
                                   </div>
                                   {p.member_phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}><Phone className="icon" style={{ width: '10px' }} /> {p.member_phone}</span>
+                                      <PhoneLink phone={p.member_phone} />
                                       <span className="quick-contact-actions" style={{ display: 'flex', gap: '4px' }}>
-                                        <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call" style={{ color: 'var(--accent-blue)' }}>
+                                        <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call">
                                           <Phone style={{ width: '11px', height: '11px' }} />
                                         </a>
-                                        <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" style={{ color: '#25D366' }}>
+                                        <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp">
                                           <MessageSquare style={{ width: '11px', height: '11px' }} />
                                         </a>
                                       </span>
@@ -4296,7 +4307,10 @@ export default function LendApp() {
                                   <td style={{ color: 'var(--accent-rose)', fontWeight: 'bold' }}>LKR {parseFloat(a.bid_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td>
                                     {a.winner_name ? (
-                                      <strong>{a.winner_name}</strong>
+                                      <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <strong>{a.winner_name}</strong>
+                                        {a.winner_phone && <PhoneLink phone={a.winner_phone} />}
+                                      </span>
                                     ) : assigningWinnerFor === a.id ? (
                                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                         <select className="glass-input" style={{ padding: '4px 6px', fontSize: '12px', width: '130px' }} value={assignWinnerMemberId} onChange={e => setAssignWinnerMemberId(e.target.value)}>
@@ -4342,7 +4356,10 @@ export default function LendApp() {
                               <div className="mobile-row-card-grid">
                                 <span className="mobile-row-card-label">Winner</span>
                                 {a.winner_name ? (
-                                  <span className="mobile-row-card-value">{a.winner_name}</span>
+                                  <span className="mobile-row-card-value" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    {a.winner_name}
+                                    {a.winner_phone && <PhoneLink phone={a.winner_phone} />}
+                                  </span>
                                 ) : assigningWinnerFor === a.id ? (
                                   <span className="mobile-row-card-value" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                     <select className="glass-input" style={{ padding: '4px 6px', fontSize: '12px', flex: 1, minWidth: '110px' }} value={assignWinnerMemberId} onChange={e => setAssignWinnerMemberId(e.target.value)}>
@@ -6615,10 +6632,10 @@ export default function LendApp() {
                                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><Phone className="icon" style={{ width: '12px', height: '12px' }} /> {loan.borrower_phone || 'No phone'}</span>
                                       {cleanPhone && (
                                         <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                                          <a href={`tel:${cleanPhone}`} className="quick-contact-btn phone" title="Direct Dial" style={{ color: 'var(--accent-blue)' }}>
+                                          <a href={`tel:${cleanPhone}`} className="quick-contact-btn phone" title="Direct Dial">
                                             <Phone style={{ width: '11px', height: '11px' }} />
                                           </a>
-                                          <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp" style={{ color: '#25D366' }}>
+                                          <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp">
                                             <MessageSquare style={{ width: '11px', height: '11px' }} />
                                           </a>
                                         </span>
@@ -8900,10 +8917,10 @@ function LoansLoader({ onSelect, onQuickPay, fetchTrigger }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
                           <span><Phone className="icon" style={{ width: '12px', height: '12px' }} /> {loan.borrower_phone}</span>
                           <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                            <a href={`tel:${loan.borrower_phone}`} className="quick-contact-btn phone" title="Call Customer" style={{ color: 'var(--accent-blue)' }}>
+                            <a href={`tel:${loan.borrower_phone}`} className="quick-contact-btn phone" title="Call Customer">
                               <Phone style={{ width: '11px', height: '11px' }} />
                             </a>
-                            <a href={`https://wa.me/${(loan.borrower_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (loan.borrower_phone || '').replace(/[^0-9]/g, '').slice(1) : (loan.borrower_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp" style={{ color: '#25D366' }}>
+                            <a href={`https://wa.me/${(loan.borrower_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (loan.borrower_phone || '').replace(/[^0-9]/g, '').slice(1) : (loan.borrower_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp">
                               <MessageSquare style={{ width: '11px', height: '11px' }} />
                             </a>
                           </span>
@@ -8977,10 +8994,10 @@ function LoansLoader({ onSelect, onQuickPay, fetchTrigger }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                         <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><Phone className="icon" /> {loan.borrower_phone}</span>
                         <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                          <a href={`tel:${loan.borrower_phone}`} className="quick-contact-btn phone" title="Call" style={{ color: 'var(--accent-blue)' }}>
+                          <a href={`tel:${loan.borrower_phone}`} className="quick-contact-btn phone" title="Call">
                             <Phone style={{ width: '12px', height: '12px' }} />
                           </a>
-                          <a href={`https://wa.me/${(loan.borrower_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (loan.borrower_phone || '').replace(/[^0-9]/g, '').slice(1) : (loan.borrower_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="WhatsApp" style={{ color: '#25D366' }}>
+                          <a href={`https://wa.me/${(loan.borrower_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (loan.borrower_phone || '').replace(/[^0-9]/g, '').slice(1) : (loan.borrower_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="WhatsApp">
                             <MessageSquare style={{ width: '12px', height: '12px' }} />
                           </a>
                         </span>

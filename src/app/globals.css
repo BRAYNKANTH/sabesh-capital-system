@@ -2485,3 +2485,23 @@ table.desktop-only {
   .no-print { display: none !important; }
   @page { size: A4; margin: 10mm; }
 }
+
+/* Tap-to-call phone numbers */
+.phone-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-blue);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.phone-link:hover { filter: brightness(0.85); }
+@media (max-width: 768px) {
+  .phone-link { min-height: 44px; }
+}
+
+.phone-link { white-space: nowrap; }
+@media (max-width: 768px) {
+  .ticket-member-row { flex-wrap: wrap; gap: 8px; }
+}
