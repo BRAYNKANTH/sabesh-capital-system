@@ -1,261 +1,354 @@
-# STN MICRO CREDIT — Comprehensive User Manual & Operations Guide
+# Sabesh Capital — User Manual & Operations Guide
 
-Welcome to the definitive user manual and operations guide for the **STN MICRO CREDIT** system. This document outlines step-by-step guides for every function in the application, followed by a detailed explanation of the different collection payment types (Interest vs. Principal) and their accounting behaviors.
+This manual explains every part of the Sabesh system for the **owner/admin** (computer or phone) and for **field agents** (phone). It covers the cash-loan system, the Chit Fund (Ticket) portal and the Pawn portal.
 
----
-
-## Table of Contents
-1. [General Navigation & Responsive Design](#1-general-navigation--responsive-design)
-2. [Step-by-Step Administrator Workflows](#2-step-by-step-administrator-workflows)
-   - [User & Staff Management](#user--staff-management)
-   - [Issuing a New Loan (Two-Step Wizard)](#issuing-a-new-loan-two-step-wizard)
-   - [Reviewing & Auditing Loan Files](#reviewing--auditing-loan-files)
-   - [Admin Loan Management Actions](#admin-loan-management-actions)
-   - [Agent Remittances (Approving Handovers)](#agent-remittances-approving-handovers)
-   - [Double-Entry Ledger Audit Sheet](#double-entry-ledger-audit-sheet)
-3. [Step-by-Step Collection Agent Workflows](#3-step-by-step-collection-agent-workflows)
-   - [Managing Routes & Field Collections](#managing-routes--field-collections)
-   - [Shift Remittance Request](#shift-remittance-request)
-4. [Types of Collections Explained (Interest vs. Principal)](#4-types-of-collections-explained-interest-vs-principal)
-   - [Interest Collection](#interest-collection)
-   - [Principal Collection](#principal-collection)
-   - [Double-Entry Ledger Accounting Flows](#double-entry-ledger-accounting-flows)
-5. [Operational Rules & Troubleshooting](#5-operational-rules--troubleshooting)
+The organisation name shown in the app (header, printed documents, SMS and WhatsApp messages) comes from **Settings → Organization**. Change it there, not in the code.
 
 ---
 
-## 1. General Navigation & Responsive Design
-* **Header & Role Indicator:** The top header displays the logo (**STN MICRO CREDIT**), your active role badge (`Admin` or `Agent`), and a change-password settings button.
-* **Navigation Bar:** 
-  * On Desktop: Accessible links are listed at the top.
-  * On Mobile: A sticky navigation bar appears at the bottom of the screen.
-* **Layout Scaling:** Desktop tables automatically transform into swipeable compact cards on mobile, ensuring visual clarity in the field.
+## Contents
+1. [Getting started](#1-getting-started)
+2. [Finding your way around](#2-finding-your-way-around)
+3. [How loans and interest work](#3-how-loans-and-interest-work)
+4. [Admin guide — Finance portal](#4-admin-guide--finance-portal)
+5. [Agent guide](#5-agent-guide)
+6. [Chit Fund (Ticket) portal](#6-chit-fund-ticket-portal)
+7. [Pawn portal](#7-pawn-portal)
+8. [What the system does by itself](#8-what-the-system-does-by-itself)
+9. [Rules, safety and troubleshooting](#9-rules-safety-and-troubleshooting)
 
 ---
 
-## 2. Step-by-Step Administrator Workflows
+## 1. Getting started
 
-### User & Staff Management
+### Who uses the system
+| Person | Logs in? | What they can do |
+| :--- | :--- | :--- |
+| **Admin** (owner) | Yes | Everything: loans, users, cash, reports, chit funds, pawn (if switched on). |
+| **Agent** (field staff) | Yes | Collect payments on their own route, submit new loan applications for approval, hand cash over to the office. |
+| **Borrower / customer** | No | Does not use the app. They receive SMS messages and may fill in the public application form. |
 
-#### **How to Add a New Staff User (Admin or Agent)**
-1. Navigate to the **Users & Cash** section from the top or bottom navigation bar.
-2. Under the **Users** section, locate the **Add New User** form.
-3. Enter the user's **Name**, a unique **Mobile Number** (which acts as their login username), and their **Email** address.
-4. Select their **Gender** (Male / Female).
-5. Select their **Role** from the dropdown:
-   * **Admin:** Full access to all tools, settings, ledgers, and loan modifications.
-   * **Agent:** Restricted access. Can only see their assigned customers, record collections on route, and request remittances.
-6. Enter a secure temporary password.
-7. Click **Create User**. The new user is immediately registered.
+### Logging in
+1. Open the website and enter your **phone number** and **password**.
+2. Tap **Login**.
+3. Too many attempts from the same network (10 within 15 minutes) pauses logging in for 15 minutes.
 
-#### **How to Edit a User's Profile**
-1. On the **Users & Cash** page, find the user in the list (or card list on mobile).
-2. Click **Edit Details**. A popup form will appear.
-3. Update the user's name, phone, email, gender, or role as needed.
-4. Click **Save Changes**.
+**Forgot your password?** Tap **Forgot password?** on the login screen. A 6-digit code is sent by SMS (valid 10 minutes). Enter it and choose a new password. This only works if SMS is set up (see section 8). If it isn't, ask an admin to set a new password for you (section 4.1).
 
-#### **How to Permanently Delete a User Account**
-1. Locate the user under the user list.
-2. Click the **Delete** button.
-3. A security dialog box will appear asking you to confirm:
-   `Are you sure you want to delete this user? Enter your account password to verify this activity.`
-4. Enter your administrator password.
-5. Click **Confirm**.
-   * *Note: The system will block deletions if the user has active collections, remittances, or assigned loans in the history logs to preserve audit trails.*
+**First login with a temporary password:** if an admin set your password, you are asked to choose your own straight away.
 
----
+### Choosing a portal
+After login you may see a screen with up to three cards:
+- **Finance Portal** — loans, collections, cash, reports.
+- **Ticket Portal** — Chit Fund ledger.
+- **Pawn Portal** — vehicle and gold jewellery pawn loans (admins with Pawn access only).
 
-### Issuing a New Loan (Two-Step Wizard)
+If you only have access to one portal you go straight in. Use **Switch Portal** (top bar) to move between portals.
 
-#### **Step 1: Borrower Details & Interest Scheduler**
-1. Navigate to the **Give Loan** section.
-2. Under **Step 1: Borrower & Loan Terms**, input:
-   * **Borrower Info:** Full Name, Phone (mobile), and NIC Number. Email is optional. Select their Gender (Male / Female).
-   * **Financial Profile:** Borrower monthly income and purpose of the loan (e.g. business expansion).
-   * **Spouse & Dependents:** Number of dependents, spouse name, spouse NIC, and spouse occupation.
-   * **Principal Amount:** Cash amount to disburse (in LKR).
-   * **Interest Rate (%)** Rate charged per period (e.g., `3.00%` interest).
-   * **Interest Type (Periodicity):** Select **Daily**, **Weekly**, or **Monthly**.
-   * **Term Mode:** Select **Open-Ended** (running interest accrual until principal is repaid) or **Fixed Term** (maturity date computed by duration).
-   * **Agent Assignment:** Select the field collection agent responsible for this route.
-3. Click **Browse NIC Photo** to upload or take a photo of the borrower's identity document.
-4. **Guarantor Check:**
-   * **If a Guarantor is required:** Check the **Include Guarantor Details** box, and click **Next Step**.
-   * **If no Guarantor is required:** Leave the box unchecked and click **Disburse Cash Loan**.
-
-> [!IMPORTANT]
-> If any required fields are invalid (e.g., duplicate phone number or incorrect NIC format), the system disables default browser alert popups, writes a descriptive error message in red directly below the field, and automatically scrolls and focuses on the first incorrect field.
-
-#### **Step 2: Guarantor Profile** (Only if "Include Guarantor" was checked)
-1. You will be navigated to **Step 2: Guarantor Info**. A stepper menu at the top will indicate your progress.
-2. Input the Guarantor's details:
-   * **Personal Info:** Name, Phone, and NIC. *(Email and Date of Birth details are omitted).*
-   * **Legal Flags:** Specify if they are protected under the debt-recovery act, and check if they have pending court cases.
-   * **Finance Profile:** Monthly income and monthly expenses.
-3. To go back and correct Step 1 details, click **Back to Step 1**.
-4. To complete disbursal, click **Disburse Cash Loan**. The system registers the borrower, guarantor, generates the loan record, and posts the disbursal entries to the ledger.
+### Using it on a phone
+The app works in the phone browser and can be installed to the home screen ("Add to Home Screen"). On a phone the top menu becomes a **bottom bar**.
 
 ---
 
-### Reviewing & Auditing Loan Files
+## 2. Finding your way around
 
-#### **How to Search and View a Borrower's File**
-1. Navigate to **Check Loans**.
-2. Use the search bar at the top to filter loans by borrower name, phone, NIC, or status.
-3. Click on the borrower's card or row to open their **Ledger Statement File**.
-4. The file will open with the **Passbook & Payments** tab active.
+### Admin — computer
+Top bar: **Home · Give Loan · Applications · Record Payment · Check Loans · Agent Route · More · Switch Portal**.
 
-#### **How to Navigate the Loan File Tabs**
-* **Passbook & Payments Tab:** Contains a real-time recalculation of interest balances, a chronological passbook activity list, inline payment controls, and a list of historical payments with print buttons.
-* **Borrower Profile Tab:** Displays borrower addresses, spouse details, monthly income, and loan purpose.
-* **Guarantor Info Tab:** Lists guarantor NIC, legal protection markers, income/expense breakdown, and has buttons to *Edit Guarantor* or *Remove Guarantor*.
-* **Manage Loan Tab:** Contains admin-only controls to alter terms, penalties, or write off debt.
+**More** opens a menu:
+- *Daily work:* Borrower Applications, Agent Route Progress, Next Day Tasklist
+- *Money:* Users & Cash, Interest Accrual Center, Payment History
+- *Records:* Audit Log, SMS Log
 
-#### **How to View and Print the Detailed Passbook Statement**
-1. Under **Passbook & Payments**, click on the **Passbook Statement (Activity Log)** card header, or click the **View Detailed Table** button on it.
-2. You will navigate to a new full-screen page containing the chronological detailed statement (oldest first).
-3. The page displays the borrower name, phone, NIC, and a detailed table with:
-   * Date & time of every change.
-   * Event type (Loan Disbursed, Interest Added, Payments, Penalties).
-   * Detailed calculation logs (e.g. `Principal LKR 10,000 * 3% = LKR 300 interest charge`).
-   * Separate running balances for both Principal and Interest.
-4. Click **Print Statement**. A print dialog optimized for A4 paper and thermal print layouts will open.
-5. Click **Back to Loan File** to return.
+### Admin — phone
+Bottom bar: **Home · Loans · Give Loan · Record · More**. A red number on **Loans** shows overdue accounts; a number on **More** shows pending applications. **More** opens the same grouped menu as above.
 
----
+### Agent — phone
+Bottom bar: **Route · Give Loan · Remit · Applications · More**.
+- **Route** — today's collection sheet (your main screen).
+- **Remit** — hand cash over to the office.
+- **More** — Next Day Tasklist and Collection History.
 
-### Admin Loan Management Actions
+Agents on a computer see the same items in the top bar (Route Sheet, Single Payment, Next Day Tasklist, Collection History, Remit Cash).
 
-#### **How to Record an Inline Payment (Direct Collection)**
-1. Open the borrower's ledger file and click the **Passbook & Payments** tab.
-2. Locate the **Record a Payment** card in the right column.
-3. Click **Interest** or **Principal** to select the payment type.
-4. Enter the amount collected (LKR) and notes (e.g., `Week 1 payment`).
-5. Choose or drag a payment receipt photo proof.
-6. Click **Collect Payment**. The ledger updates and recalculates balances instantly.
-
-#### **How to Edit Interest Rates or Reassign Agents**
-1. Go to the **Manage Loan** tab.
-2. Under **Edit Terms**:
-   * Enter a new **Interest Rate (%)** to change the rate for future accruals.
-   * Select a different agent from the **Reassign Agent** dropdown to change route assignments.
-3. Click **Save Changes**.
-
-#### **How to Apply a Late Fee (Penalty)**
-1. Navigate to the **Manage Loan** tab.
-2. Under **Apply Late Fee / Penalty**, enter the penalty amount in LKR.
-3. Enter the reason for the charge.
-4. Click **Apply Penalty**. This amount is immediately posted to the borrower's interest balance.
-
-#### **How to Default or Reinstate a Loan**
-1. **To Default:** Under **Manage Loan**, enter the reason for default and click **Mark Defaulted**. This locks the account and prevents agents from recording collections in the field.
-2. **To Reinstate:** If the borrower clears their arrears, navigate to the defaulted loan's **Manage Loan** tab and click **Reinstate to Active**. Agents can collect cash again.
-
-#### **How to Write Off a Bad Debt**
-1. Navigate to the **Manage Loan** tab.
-2. Click **Write Off Loan**. 
-3. *Warning: This permanently closes the loan file, setting principal and interest balances to zero, and writes off the remaining receivable balance as an asset loss in the ledger.*
+### Phone numbers are tap-to-call
+Wherever a member's or customer's phone number appears in the app, tapping it dials that number on a phone. The green button beside it opens WhatsApp.
 
 ---
 
-### Agent Remittances (Approving Handovers)
+## 3. How loans and interest work
 
-#### **How to Approve / Reject an Agent's Field Cash Remittance**
-1. Navigate to the **Users & Cash** page.
-2. Scroll to the **Cash settlements / Handovers** section.
-3. Review pending requests from agents (displays Agent Name, Amount, Date, and Proof attachments).
-4. **To Approve:** Click **Approve**. The agent's cash-in-hand balance decreases, and the corporate Cash account increases.
-5. **To Reject:** Click **Reject**. The request is dismissed and the cash remains on the agent's cash-in-hand record.
+### The loan types
+When giving a loan you choose how interest builds up (**Daily, Weekly or Monthly**) and the **loan term**.
 
----
+| Type | How it works |
+| :--- | :--- |
+| **Open-ended** (Daily, Weekly or Monthly) | Interest keeps building each period until the principal is fully repaid. The customer pays **interest** and/or **principal** whenever they can. |
+| **Fixed term** (Weekly or Monthly) | Same as above, but with an end date based on the duration you enter. |
+| **Daily Fixed Term ("daily installment")** | One fixed amount (principal + interest together) is collected **every day** for the whole term. |
 
-### Double-Entry Ledger Audit Sheet
+### The interest rate is always a monthly rate
+- **Monthly** loan: interest per month = principal × rate ÷ 100.
+- **Weekly** loan: monthly interest ÷ 4, added every 7 days.
+- **Daily** loan: monthly interest ÷ 30, added every day.
 
-#### **How to Inspect and Export Corporate Balances**
-1. Go to the **Users & Cash** page.
-2. Locate the **General Double-Entry Ledger** table. This lists the system accounts (e.g., Cash, Cash in Hand (Agents), Loans Receivable, Interest Revenue, Penalty Revenue) and their asset balances.
-3. Click **Export CSV** to download the ledger entries to your computer.
+*Example (weekly):* LKR 100,000 at 4% → LKR 4,000 a month → **LKR 1,000 interest each week**.
+*Example (daily, open-ended):* LKR 40,000 at 3% → LKR 1,200 a month → **LKR 40 interest each day**.
 
----
+### Daily Fixed Term
+The duration must be a **multiple of 31 days** (31 = 1 month, 62 = 2 months, 93 = 3 months…). One extra collection day per month is collected.
+- Total interest = principal × rate ÷ 100 × number of months.
+- Daily installment = (principal + total interest) ÷ (duration − number of months).
+- Collection starts on the day the loan is given.
 
-## 3. Step-by-Step Collection Agent Workflows
+*Example:* LKR 30,000 at 10% for 31 days → interest LKR 3,000 → daily installment **LKR 1,100.00**, collected 31 times → customer repays **LKR 34,100.00** in total.
 
-### Managing Routes & Field Collections
+### Paying interest and principal
+- **Interest payment** — reduces the interest owed. Principal stays the same.
+- **Principal payment** — reduces the money borrowed. When principal reaches zero the loan is **Fully Paid**.
+- If you enter **more than is owed**, the system records only what is owed and tells you the **change to return** to the customer.
+- A daily-installment payment is split automatically between principal and interest in a fixed ratio.
 
-#### **How to View Assigned Customers**
-1. Log in to your Agent account.
-2. Your home dashboard will open. Under **My Customers**, you will see a list of all borrowers assigned to you.
-3. Toggle between **Active**, **Defaulted**, and **Closed** status tabs using the buttons.
+### Loan statuses
+| Status | Meaning |
+| :--- | :--- |
+| **Pending approval** | An agent submitted it; no cash has moved. |
+| **Active** | Disbursed and collecting. |
+| **Fully paid** | Closed. |
+| **Defaulted** | Locked — agents cannot collect until an admin reinstates it. |
+| **Rejected** | Admin declined an agent's application. |
+| **Written off** | Closed as bad debt. |
 
-#### **How to Record a Field Collection Payment**
-1. From the navigation menu, select **Collect**.
-2. Select the customer from the dropdown list.
-3. The system will display the borrower's **Outstanding Principal** and **Interest Due** balances.
-4. Choose the collection payment type:
-   * **Pay Interest:** Reduces their interest due balance.
-   * **Pay Principal:** Reduces their principal outstanding balance.
-5. Enter the cash amount collected.
-6. Enter optional notes or snap a photo of the cash/receipt.
-7. Click **Collect Payment**.
-8. A **Receipt Modal** will open displaying a unique collection transaction code.
-9. Click **Print Receipt** to send the layout to a mobile thermal printer, or click **Close** to finish.
-
----
-
-### Shift Remittance Request
-
-#### **How to Submit Your Handed Over Cash for Approval**
-1. At the end of your route, click the **History** tab.
-2. Locate the **Submit Remittance (Cash Handover)** card.
-3. Enter the cash amount you are handing over to the office.
-4. Upload proof of transfer or write notes.
-5. Click **Submit Handover Request**.
-6. The request moves to *Pending* status. Once approved by the Admin, the cash is cleared from your record.
+### Where the money is recorded
+Every money movement is recorded twice (double-entry ledger) so the books always balance: giving a loan, interest building up, penalties, payments, agent cash handovers and write-offs. The pawn portal has its own separate ledger (section 7).
 
 ---
 
-## 4. Types of Collections Explained (Interest vs. Principal)
+## 4. Admin guide — Finance portal
 
-STN MICRO CREDIT maintains a strict distinction between **Interest Collections** and **Principal Collections**. 
+### 4.1 Users & staff (More → Users & Cash → User Management)
 
-```mermaid
-graph TD
-    A[Cash Payment Received] --> B{Choose Collection Type}
-    B -- Interest Payment --> C[Reduce Interest Due]
-    B -- Principal Payment --> D[Reduce Principal Outstanding]
-    C --> E[Ledger Entry: Debit Cash / Credit Interest Receivable]
-    D --> F[Ledger Entry: Debit Cash / Credit Principal Receivable]
-```
+**Add a user**
+1. Open **Users & Cash**, then **User Management**, then **Add New User**.
+2. Enter name, **mobile number** (this is the login), role (Admin or Agent) and a starting password.
+3. Tick the portals they may use: **Finance**, **Ticket**, and (admins only) **Pawn**.
+4. Tap **Create User**.
 
-### Interest Collection
-* **Definition:** Payments specifically intended to pay down accrued interest charges.
-* **Calculation Impact:** Reduces the `interest_balance` (Interest Due) of the loan. It does not affect the `principal_outstanding` balance.
-* **When to collect:** Typically, daily or weekly borrowers pay interest charges first to prevent their interest balances from accumulating.
+**Edit a user** — tap **Edit Details** to change name, phone, email, role and portal access.
 
-### Principal Collection
-* **Definition:** Payments directly applied to reduce the original money borrowed (Principal).
-* **Calculation Impact:** Reduces the `principal_outstanding` (Principal Outstanding). Because future interest accruals are calculated as a percentage of the *current outstanding principal*, making principal payments reduces the amount of interest charged in future periods.
-* **When to collect:** Collected when the borrower wishes to pay down the core debt.
+**Set a new password** — in the same Edit window open **Set a new password**:
+1. Type the new password twice (6+ characters).
+2. Type **your own password** to confirm.
+3. Leave *"Make them choose their own password at next login"* ticked (recommended), then tap **Set Password**.
+
+Use this when the SMS reset code can't reach the person. Tell them the new password in person. The change is recorded in the Audit Log (the password itself is never stored there). You can also set your own password this way.
+
+**Send Reset Code** — sends an SMS code so the person sets their own password from the login screen. Needs SMS to be working.
+
+**Change your own password** — **Settings → Security & Password** (needs your current password).
+
+**Deactivate / Activate** — stops or restores a person's login without deleting anything.
+
+**Delete a user** — asks for your password and is refused if the person has loans, payments or cash handovers on record (deactivate them instead).
+
+### 4.2 Giving a loan (Give Loan)
+The form has steps; the first is the only essential one.
+
+1. **KYC Profile** — borrower name, mobile number and NIC are required. Address, email, date of birth, NIC photos and photo proof are optional. Tap **Fast Terms (Skip Step 2)** to jump straight to the loan terms, or **Continue to Step 2**.
+2. **Financial Profile** — optional: purpose of the loan, monthly income, spouse details.
+3. **Loan Terms** — principal amount, interest rate (% per month), **Accrual Frequency** (Daily/Weekly/Monthly), **Issued Date** (can be set to a past date to enter an old loan; not in the future), **Loan Term** (Open-ended or Fixed term with a duration) and **Assign Collection Agent**.
+4. Optionally tick **Include guarantor** to add guarantor details (step 4). A guarantor can back at most 3 active/pending loans.
+5. Tap **Disburse Cash Loan**. The customer gets an SMS and the loan appears in Check Loans.
+
+If a field is wrong, a red message appears under it and the screen scrolls to it.
+
+### 4.3 Approving loans submitted by agents
+Agent-submitted loans wait as **Pending approval** (shown on the Home screen and in Check Loans). Open one with **Review →** and **Approve** (cash is considered disbursed and interest starts from approval) or **Reject** with a reason. The agent is notified by SMS.
+
+### 4.4 Applications from customers (Applications)
+Customers (or a family member) can fill in the public application form in **English or Tamil**.
+- On the Applications screen tap **Copy Link** or **Share via WhatsApp** and send it to the customer.
+- Submissions appear under **Pending**. Review one, then **Create Loan from This** (opens Give Loan pre-filled) or **Dismiss** it.
+- Filters: Pending, Converted, Dismissed, All.
+
+### 4.5 Finding and managing loans (Check Loans)
+- Search by name, phone, NIC or reference. Filter by status, agent, collection type and period. **Needs Follow-up** shows active loans that haven't paid for a long time.
+- **Export CSV** downloads the list.
+- **Update Interest Now** adds any interest that has fallen due (this also happens automatically every morning).
+- Tap a loan (**View →**) to open its file.
+
+**Inside a loan file**
+- **Passbook & Payments** — the activity log, the **Record a Payment** box, and the list of payments received (with WhatsApp and Print for each receipt). For daily installments you will see *"Day X of 31"* progress.
+- **Borrower Profile** and **Guarantor Info** (add, edit or remove a guarantor).
+- **Manage Loan** (admin only):
+  - **Edit Terms** — change the interest rate (future periods only) or reassign the agent.
+  - **Extend Loan Term** — gives a struggling borrower more time; the payment amount stays the same.
+  - **Apply Late Fee / Penalty** — adds an amount to the interest owed (the borrower is told by SMS).
+  - **Mark Defaulted** — locks the loan so agents cannot collect; **Reinstate** unlocks it.
+  - **Write Off as Bad Debt** — permanently closes it and records the loss.
+  - **Delete Loan** — permanent; needs a reason and your password, and is refused if the loan has payments.
+- **View Agreement / Download PDF** — the printable loan agreement.
+
+### 4.6 Recording payments (Record Payment)
+A collection sheet listing everyone due today, in tabs **Daily · Weekly · Monthly**, with a collection-date picker and an agent filter.
+- **Full Due** — tick it to collect the whole amount due, or tick **Partial** and type the amount.
+- Tap **Save** on a row, or **Save All Entered** to save everyone you've filled in.
+- A person you've already collected from moves under **Done Today**.
+- **Call** next to a name rings that borrower.
+
+You can also record a single payment inside a loan file.
+
+### 4.7 Agent cash (Users & Cash)
+- **Agent Cash-in-Hand Reconciliation** shows, per agent: collected, remitted, and cash in hand.
+- **Cash Handovers** lists the agents' handover requests. **Verify** accepts the cash (the agent's cash in hand goes down); **Reject** declines it. **Export CSV** is available.
+- **Ledger Report** shows the company accounts and whether the books balance.
+
+### 4.8 Reports and records (More menu)
+- **Next Day Tasklist** — what is due tomorrow, split into Daily, Weekly and Monthly, with a quick link to record the payment.
+- **Agent Route Progress** — what each agent has collected today.
+- **Interest Accrual Center** — interest earned by frequency and recent accrual logs.
+- **Payment History** — every payment, searchable by name/phone/NIC/code, with date, method and type filters and **Export CSV**.
+- **Audit Log** — who did what and when; filter by action type and date.
+- **SMS Log** — every message the system tried to send and whether it was **Sent**, **Failed** or **Mocked** (not actually sent because SMS isn't set up).
+
+### 4.9 Settings
+- **Settings → Organization** — organisation name and logo.
+- **Users & Cash → Reminder Settings & Alerts** — how many days **before the due date** the payment reminder SMS is sent.
+- **Settings → Edit Profile / Security & Password** — your own details and password.
 
 ---
 
-### Double-Entry Ledger Accounting Flows
+## 5. Agent guide
 
-Each activity triggers automatic offsetting debit and credit entries in the background:
+### 5.1 A normal day
+**Morning** — open **Route**. You see the customers due today. Use **More → Next Day Tasklist** the evening before to plan the round.
 
-| Transaction Event | Account Debited | Account Credited | Accounting Meaning |
-| :--- | :--- | :--- | :--- |
-| **Loan Disbursal** | `loans_receivable_principal` | `cash` | Asset moves from bank cash to principal receivable. |
-| **Interest Accrual** | `loans_receivable_interest` | `interest_revenue` | System records interest receivable and recognizes interest income. |
-| **Penalty Charged** | `loans_receivable_interest` | `penalty_revenue` | Late fee asset increases, penalty revenue is recognized. |
-| **Interest Collection** | `cash` (or `cash_in_hand`) | `loans_receivable_interest` | Liquid cash increases; interest receivable asset decreases. |
-| **Principal Collection** | `cash` (or `cash_in_hand`) | `loans_receivable_principal` | Liquid cash increases; principal receivable asset decreases. |
-| **Cash Handover (Remit)** | `cash` (Corporate) | `cash_in_hand` (Agent) | Agent cash liability is cleared; corporate cash increases. |
-| **Bad Debt Write Off** | `written_off_expense` | `loans_receivable` (both) | Assets decrease to zero; write-off expense is charged. |
+**At each visit**
+1. Find the customer on the **Route sheet**.
+2. Tick **Full Due**, or **Partial** and enter the amount.
+3. Tap **Save**. The customer moves to **Done Today**.
+4. Tap the phone number to call a customer who isn't home.
+
+**End of day** — open **Remit**, enter the cash you are handing over, add notes and submit. The office **Verifies** it; until then it stays pending.
+
+### 5.2 Route sheet vs Single payment
+At the top of the Route screen there are two tabs:
+- **Route sheet** — the fast list for today's round (default).
+- **Single payment** — pick one customer from a searchable list, choose **Pay Interest** or **Pay Principal**, and enter the amount.
+
+### 5.3 Giving a loan as an agent
+Use **Give Loan**. The loan is **submitted for approval** — no cash moves until an admin approves it. You are notified by SMS when it is approved or rejected. You can only submit loans collected by yourself.
+
+### 5.4 Applications
+**Applications** lists customer-submitted forms so you can turn them into a loan application.
+
+### 5.5 When a customer does not pay
+- Simply don't save a payment for that customer.
+- A daily-installment loan that falls **3 or more days behind** sends an SMS to the customer, to you and to the admin, and repeats daily until it is paid.
+- Call the customer from the tap-to-call number and tell the admin if the problem continues.
+
+### 5.6 Mistakes and no internet
+- A wrong payment cannot be edited by an agent — tell the admin.
+- If there is **no internet**, a payment is **saved on your phone** and shown as **"N pending sync"** at the top. It sends automatically when you are back online; tap the badge to retry now. Do not enter the same payment twice.
+
+### 5.7 Do and don't
+- **Do** save each payment straight after collecting it.
+- **Do** remit your cash daily.
+- **Don't** share your password. **Don't** collect on a loan marked Defaulted — it is locked.
 
 ---
 
-## 5. Operational Rules & Troubleshooting
-1. **Accrual Calculations:** Interest calculations automatically trigger when the calendar date changes (at midnight 00:00:00). For example, if a loan is issued at 18:00 (6 PM) today, you do not have to wait 24 hours until 18:00 tomorrow for interest to accumulate; it will automatically accrue immediately when the date changes to tomorrow at midnight (00:00:00).
-2. **Double Disbursements:** The system has built-in idempotency protection. If you submit a loan or payment and the page hangs, do not refresh or double-click. Go to the history logs to confirm if the transaction was recorded.
-3. **Locked Accounts:** If an agent complains they cannot collect from a customer, verify if the loan has been marked as *Defaulted* under the Manage tab. Reinstating the loan unlocks collection options.
+## 6. Chit Fund (Ticket) portal
+
+A chit group has a fixed number of members and runs one round per member. Each round, members bid (a discount); the winner receives the total less the bid, and everyone pays a share plus the host fee.
+
+### 6.1 Create a group
+**Create New Group** → name, total value, member count, start date, host fee (a **percentage** of each member's share or a **fixed amount**), and optionally a **starting round** if the group already ran some rounds on paper.
+
+### 6.2 Members
+Open a group → **Member Roster**.
+- **Add** one at a time or paste a list (*Name, Phone*) in **bulk**.
+- Tap a phone number to **call**; the green button opens WhatsApp.
+- **Edit** (pencil) changes a name or phone.
+- **Remove** (bin) deletes a member. It is **refused** if the member has already won a round (change that round's winner first) or has payments marked paid (un-tick them first).
+
+### 6.3 Running a round
+**Round Auction & Notice** → enter the **bid amount**, the **winner** (optional now, can be set later), the auction date and the next round date, then run it. The system calculates:
+- Winner payout = total value − bid.
+- Each member's share = payout ÷ members, plus the host fee.
+
+A shareable notice is generated for WhatsApp.
+
+### 6.4 Payments tracker
+**Payments Tracker** lists each member's payment for a chosen round. Tick **paid** when received. For unpaid members, a **WhatsApp reminder** is prepared (headed with your organisation's name); tap the phone number to call.
+
+### 6.5 Past rounds
+**Past Auctions History** shows every round. Admins can:
+- **Edit** a round — change the winner or the date. The money amounts of that round do not change.
+- **Undo** the **latest** round — removes it so you can run it again with the right bid. Refused if any payment of that round is marked paid.
+
+### 6.6 Edit a group
+Use the **pencil** on the group card, or **Edit Group** inside a group, to change the name, total value, host fee, start date, next round date and member count.
+- **Total value and host fee changes apply only to rounds not yet run.** Rounds already run keep their recorded amounts.
+- Member count is also the number of rounds. It can go up (more rounds) or down, but not below the members on the roster or the rounds already run.
+- **Delete Group** permanently removes the group and its entire history (you must type its name to confirm).
+
+---
+
+## 7. Pawn portal
+
+For loans secured by a **vehicle** or **gold jewellery**. It has its own loans, payments, interest and ledger, separate from the cash loans. Only admins with **Pawn Portal Access** can use it (turn it on under Users & Cash → Edit Details).
+
+### 7.1 Record a pawn loan
+**New Pawn Loan** has three parts:
+1. **Customer details** — name, father/husband name, NIC, mobile, occupation, monthly income, reference name and number, address.
+2. **Pawned item** — choose **Vehicle** (make/model, registration number) or **Gold jewellery** (weight in grams, karat, serial/tag), a description, the **estimated value** (you type it), where it is stored, and up to 4 photos of the item and of documents.
+3. **Loan terms** — loan amount, interest rate (% per month), how often interest is collected (monthly, weekly or daily), loan period in months, and an optional start date for entering an older paper ticket.
+
+A preview shows the interest per period, the **due date**, and how much of the item's value you are lending (a warning appears if you lend more than it is worth). The customer gets an SMS and the loan gets a ticket number like **PWN-001**.
+
+Interest works exactly like the cash loans (section 3) and is added by the same daily job. It stops building once the principal is fully repaid.
+
+### 7.2 The list
+Filters: **Active · Overdue · Ready to forfeit · Redeemed · Forfeited · All**, plus **All items / Vehicles / Gold** with counts, and a search box (name, NIC, phone, ticket number or item).
+
+### 7.3 Working on a loan
+Open a loan to see balances, the item and customer, payments and interest history.
+- **Record a payment** — **Pay interest** or **Pay principal**. When both interest and principal reach zero the loan becomes **Redeemed**.
+- **Return item to customer** — once redeemed, hand the item back and confirm.
+- **Extend due date** — gives more months; interest keeps building.
+- **Print ticket** — the pawn ticket in **English** or **தமிழ்**, ready to print and sign.
+
+### 7.4 When the customer doesn't pay
+- After the due date the loan shows **N days overdue**.
+- The customer has a **30-day grace period** after the due date. SMS reminders go out on day 1, day 15 and day 30 overdue.
+- After the grace period the loan shows **Ready to forfeit**. **Forfeit item** closes the loan: sale/auction proceeds pay the **interest first, then the principal**; any extra money is recorded as **owed back to the customer**, any shortfall is **written off**. You can forfeit early only by ticking a clear confirmation box.
+
+---
+
+## 8. What the system does by itself
+
+| When | What happens |
+| :--- | :--- |
+| **Every morning (about 5:30 AM, Sri Lanka time)** | Interest that has fallen due on every active loan (cash and pawn) is added. If the job missed days, it catches up on all of them. |
+| **Every morning (about 8:00 AM)** | Payment reminder SMS go to weekly/monthly borrowers a set number of days before the due date; pawn customers get due-date and overdue reminders; daily-installment loans **3+ days behind** alert the borrower, agent and admin. |
+| **When a loan is given** | The borrower is told the amount and the collection amount. |
+| **When a payment is recorded** | Weekly and monthly borrowers get a receipt; the admin gets an alert. Daily collections do **not** send an SMS each day. |
+| **Penalty, default, reinstate, term extension** | The borrower is told by SMS. |
+| **Agent submits a loan** | The admin is told; the agent is told when it is approved or rejected. |
+
+**SMS needs setup.** SMS are sent through Text.lk. If its keys aren't configured for your organisation, messages are not actually sent — they appear in the **SMS Log** as **Mocked**. Check the SMS Log after setup to confirm messages show **Sent**.
+
+---
+
+## 9. Rules, safety and troubleshooting
+
+1. **Don't double-submit.** If a page hangs after you save a loan or payment, don't tap again. Check Payment History or Check Loans first — duplicates are blocked, but check.
+2. **An agent can't collect on a Defaulted loan.** An admin must **Reinstate** it first.
+3. **Daily Fixed Term** durations must be 31, 62, 93… days.
+4. **Signed out after typing a wrong password when deleting a user?** That is a known quirk — just log in again.
+5. **A confirmation window stays on "Working…"?** Reload the page.
+6. **Can't log in?** Check the phone number and password. After 10 attempts from the same network, logging in is paused for 15 minutes. An admin can set a new password for you.
+7. **No Pawn Portal card?** Ask an admin to turn on **Pawn Portal Access** for your account, then log out and back in.
+8. **Anything you did is recorded** in the Audit Log — including who changed a password, edited a chit group or forfeited a pawn loan.
+9. **Keep backups.** Deleting loans, agents or groups cannot be undone.
