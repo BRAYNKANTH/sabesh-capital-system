@@ -229,8 +229,8 @@ export default function PawnPortal({ orgName, showToast, onBack }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {shown.map((l) => (
-            <button key={l.id} type="button" onClick={() => openLoan(l.id)} className="glass-card"
-              style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 18px', display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) auto', gap: '14px', alignItems: 'center', border: '1px solid var(--border-light)' }}>
+            <button key={l.id} type="button" onClick={() => openLoan(l.id)} className="glass-card pawn-row"
+              style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 18px', border: '1px solid var(--border-light)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {l.pawn_type === 'gold' ? <Gem className="icon" aria-label="Gold jewellery" /> : <Car className="icon" aria-label="Vehicle" />}
