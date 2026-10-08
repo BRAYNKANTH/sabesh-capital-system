@@ -337,6 +337,9 @@ export default function LendApp() {
   const [editMemberForm, setEditMemberForm] = useState(null); // null = closed: { id, name, phone }
   const [editRoundForm, setEditRoundForm] = useState(null); // null = closed: { id, round_number, auction_date, winner_member_id }
   const [ticketDialogError, setTicketDialogError] = useState('');
+  const EMPTY_SET_PW = { new_password: '', confirm: '', admin_password: '', require_change: true };
+  const [setPwForm, setSetPwForm] = useState(EMPTY_SET_PW);
+  const [setPwError, setSetPwError] = useState('');
   const [assigningWinnerFor, setAssigningWinnerFor] = useState(null); // auction id currently being edited, or null
   const [assignWinnerMemberId, setAssignWinnerMemberId] = useState('');
 
@@ -809,7 +812,32 @@ export default function LendApp() {
     }
   };
 
+  const handleSetUserPassword = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setSetPwError('');
+    if (setPwForm.new_password.length < 6) { setSetPwError('The new password must be at least 6 characters.'); return; }
+    if (setPwForm.new_password !== setPwForm.confirm) { setSetPwError("The two new passwords don't match."); return; }
+    if (!setPwForm.admin_password) { setSetPwError('Enter your own password to confirm.'); return; }
+    setLoading(true);
+    try {
+      const res = await api.post(`/users/${editingUser.id}/set-password`, {
+        new_password: setPwForm.new_password,
+        admin_password: setPwForm.admin_password,
+        require_change: setPwForm.require_change
+      });
+      showToast(res.message);
+      setSetPwForm(EMPTY_SET_PW);
+    } catch (err) {
+      setSetPwError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStartEditUser = (targetUser) => {
+    setSetPwForm(EMPTY_SET_PW);
+    setSetPwError('');
     setEditingUser(targetUser);
     setEditUserForm({
       name: targetUser.name || '',
@@ -5763,6 +5791,41 @@ export default function LendApp() {
                           <ClipboardCheck className="icon" /> Save Changes
                         </button>
                       </form>
+
+                      {editingUser.role !== 'borrower' && (
+                        <details style={{ marginTop: '18px', borderTop: '1px solid var(--border-light)', paddingTop: '14px' }}>
+                          <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '14px' }}>Set a new password</summary>
+                          <form onSubmit={handleSetUserPassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                              {editingUser.id === user.id
+                                ? 'This changes your own password.'
+                                : 'Use this when the SMS reset code can\'t reach them. Tell them the new password in person.'}
+                            </p>
+                            <div>
+                              <label htmlFor="sp-new" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>New password (6+ characters)</label>
+                              <input id="sp-new" type="password" autoComplete="new-password" className="glass-input" value={setPwForm.new_password} onChange={e => setSetPwForm(p => ({ ...p, new_password: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label htmlFor="sp-confirm" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Type the new password again</label>
+                              <input id="sp-confirm" type="password" autoComplete="new-password" className="glass-input" value={setPwForm.confirm} onChange={e => setSetPwForm(p => ({ ...p, confirm: e.target.value }))} />
+                            </div>
+                            <div>
+                              <label htmlFor="sp-admin" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Your own password (to confirm)</label>
+                              <input id="sp-admin" type="password" autoComplete="current-password" className="glass-input" value={setPwForm.admin_password} onChange={e => setSetPwForm(p => ({ ...p, admin_password: e.target.value }))} />
+                            </div>
+                            {editingUser.id !== user.id && (
+                              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', cursor: 'pointer' }}>
+                                <input type="checkbox" checked={setPwForm.require_change} onChange={e => setSetPwForm(p => ({ ...p, require_change: e.target.checked }))} style={{ marginTop: '3px', width: '16px', height: '16px' }} />
+                                Make them choose their own password at next login (recommended)
+                              </label>
+                            )}
+                            {setPwError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{setPwError}</div>}
+                            <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>
+                              <KeyRound className="icon" /> {loading ? 'Saving…' : 'Set Password'}
+                            </button>
+                          </form>
+                        </details>
+                      )}
                     </div>
                   </div>
                 )}
