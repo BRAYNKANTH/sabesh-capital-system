@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
+import { notifyChitPaymentReceived } from '@/lib/services/chitNotifications.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request, { params }) {
@@ -53,6 +54,12 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ message: 'payment_id is required.' }, { status: 400 });
     }
 
+    const existing = await db('ticket_payments').where({ id: payment_id, ticket_id: id }).first();
+    if (!existing) {
+      return NextResponse.json({ message: 'Payment record not found.' }, { status: 404 });
+    }
+    const justPaid = !!is_paid && !existing.is_paid;
+
     const updated = await db('ticket_payments')
       .where({ id: payment_id, ticket_id: id })
       .update({
@@ -77,7 +84,20 @@ export async function PUT(request, { params }) {
       description: `Marked payment for ${payment.member_name} (Round ${payment.round_number}) as ${is_paid ? 'Paid' : 'Unpaid'}.`
     });
 
-    return NextResponse.json({ message: 'Payment updated successfully.', payment });
+    // Thank-you SMS only on the moment a payment goes from unpaid to paid —
+    // ticking it again, or un-ticking it, never sends anything.
+    let sms = 'none';
+    if (justPaid) {
+      const member = await db('ticket_members').where({ id: payment.member_id }).first();
+      if (member?.phone) {
+        sms = 'sent';
+        notifyChitPaymentReceived(payment_id).catch((err) => logError('Chit payment SMS failed', err, { paymentId: payment_id }));
+      } else {
+        sms = 'no_phone';
+      }
+    }
+
+    return NextResponse.json({ message: 'Payment updated successfully.', payment, sms });
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
     logError('Update payment error', error, { method: request.method, url: request.url });

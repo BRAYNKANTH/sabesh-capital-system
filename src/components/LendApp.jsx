@@ -1801,7 +1801,8 @@ export default function LendApp() {
         payment_id: paymentId,
         is_paid: isPaid
       });
-      showToast(`Payment status updated.`);
+      const memberName = ticketPayments.find(x => x.id === paymentId)?.member_name || 'the member';
+      showToast(res.sms === 'sent' ? `Payment saved. A thank-you SMS was sent to ${memberName}.` : res.sms === 'no_phone' ? `Payment saved. ${memberName} has no phone number on file, so no SMS was sent.` : 'Payment status updated.');
       // Refresh payments list without full detail reload
       handleFetchTicketPaymentsByRound(ticketPaymentFilterRound);
     } catch (err) {

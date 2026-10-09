@@ -280,7 +280,7 @@ Open a group → **Member Roster**.
 A shareable notice is generated for WhatsApp.
 
 ### 6.4 Payments tracker
-**Payments Tracker** lists each member's payment for a chosen round. Tick **paid** when received. For unpaid members, a **WhatsApp reminder** is prepared (headed with your organisation's name); tap the phone number to call.
+**Payments Tracker** lists each member's payment for a chosen round. Tick **paid** when received — the member is **sent a thank-you SMS automatically** (amount, group, round, date, how many rounds they have paid so far, and the next round date). If a member has no phone number, the payment is still saved and the screen tells you no SMS was sent. Ticking an already-paid payment again, or un-ticking it, sends nothing. For unpaid members, a **WhatsApp reminder** is prepared (headed with your organisation's name); tap the phone number to call.
 
 ### 6.5 Past rounds
 **Past Auctions History** shows every round. Admins can:
@@ -335,6 +335,7 @@ Open a loan to see balances, the item and customer, payments and interest histor
 | **When a loan is given** | The borrower is told the amount and the collection amount. |
 | **When a payment is recorded** | Weekly and monthly borrowers get a receipt; the admin gets an alert. Daily collections do **not** send an SMS each day. |
 | **Penalty, default, reinstate, term extension** | The borrower is told by SMS. |
+| **A chit member's payment is ticked paid** | The member gets a thank-you SMS with the amount, group, round and date. |
 | **Agent submits a loan** | The admin is told; the agent is told when it is approved or rejected. |
 
 **SMS needs setup.** SMS are sent through Text.lk. If its keys aren't configured for your organisation, messages are not actually sent — they appear in the **SMS Log** as **Mocked**. Check the SMS Log after setup to confirm messages show **Sent**.
