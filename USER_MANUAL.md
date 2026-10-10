@@ -280,7 +280,7 @@ Open a group → **Member Roster**.
 A shareable notice is generated for WhatsApp.
 
 ### 6.4 Payments tracker
-**Payments Tracker** lists each member's payment for a chosen round. Tick **paid** when received — the member is **sent a thank-you SMS automatically** (amount, group, round, date, how many rounds they have paid so far, and the next round date). If a member has no phone number, the payment is still saved and the screen tells you no SMS was sent. Ticking an already-paid payment again, or un-ticking it, sends nothing. For unpaid members, a **WhatsApp reminder** is prepared (headed with your organisation's name); tap the phone number to call.
+**Payments Tracker** lists each member's payment for a chosen round. Tick **paid** when received — the member is **sent a thank-you SMS automatically** (amount, group, round, date, how many rounds they have paid so far, and the next round date). If a member has no phone number, the payment is still saved and the screen tells you no SMS was sent. **Only an admin can tick or un-tick** a payment; agents can look at the tracker but their tick boxes are switched off. **Un-ticking asks for confirmation** (it removes the record that the member paid, and they have already been sent the SMS). Un-ticking sends nothing, but if you tick the payment again the member is sent the thank-you SMS again. Ticking twice at the same moment (a double-tap) can never send two SMS. For unpaid members, a **WhatsApp reminder** is prepared (headed with your organisation's name); tap the phone number to call.
 
 ### 6.5 Past rounds
 **Past Auctions History** shows every round. Admins can:

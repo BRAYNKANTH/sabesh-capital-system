@@ -42,7 +42,8 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
-    const user = await requireAuth(request); // Admin or agent can mark payments
+    // Admins only: ticking a payment records collected money and sends the member an SMS.
+    const user = await requireAuth(request, ['admin']);
     if (!user.ticket_access) {
       return NextResponse.json({ message: 'Forbidden. You do not have access to the Ticket system.' }, { status: 403 });
     }
@@ -58,18 +59,27 @@ export async function PUT(request, { params }) {
     if (!existing) {
       return NextResponse.json({ message: 'Payment record not found.' }, { status: 404 });
     }
-    const justPaid = !!is_paid && !existing.is_paid;
 
-    const updated = await db('ticket_payments')
+    // Atomic change: the row is only updated if it is NOT already in the requested
+    // state. If two requests arrive at the same instant (double-tap, slow connection)
+    // exactly one of them changes the row, so exactly one SMS and one audit entry.
+    const changed = await db('ticket_payments')
       .where({ id: payment_id, ticket_id: id })
+      .andWhere('is_paid', !is_paid)
       .update({
         is_paid: !!is_paid,
         payment_date: is_paid ? db.fn.now() : null
       });
 
-    if (!updated) {
-      return NextResponse.json({ message: 'Payment record not found.' }, { status: 404 });
+    if (!changed) {
+      const current = await db('ticket_payments')
+        .join('ticket_members', 'ticket_payments.member_id', 'ticket_members.id')
+        .where('ticket_payments.id', payment_id)
+        .select('ticket_payments.*', 'ticket_members.name as member_name')
+        .first();
+      return NextResponse.json({ message: 'Payment was already in that state.', payment: current, sms: 'none', unchanged: true });
     }
+    const justPaid = !!is_paid;
 
     // Get the updated payment details for audit log
     const payment = await db('ticket_payments')

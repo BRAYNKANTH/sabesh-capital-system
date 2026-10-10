@@ -337,6 +337,7 @@ export default function LendApp() {
   const [editMemberForm, setEditMemberForm] = useState(null); // null = closed: { id, name, phone }
   const [editRoundForm, setEditRoundForm] = useState(null); // null = closed: { id, round_number, auction_date, winner_member_id }
   const [ticketDialogError, setTicketDialogError] = useState('');
+  const [payingId, setPayingId] = useState(null); // chit payment currently being saved
   const EMPTY_SET_PW = { new_password: '', confirm: '', admin_password: '', require_change: true };
   const [setPwForm, setSetPwForm] = useState(EMPTY_SET_PW);
   const [setPwError, setSetPwError] = useState('');
@@ -1794,19 +1795,39 @@ export default function LendApp() {
     }
   };
 
-  const handleToggleTicketPayment = async (paymentId, isPaid) => {
+  // Un-ticking removes a recorded collection, so it asks first. Ticking it again
+  // afterwards sends the member a fresh thank-you SMS.
+  const handleToggleTicketPayment = (paymentId, isPaid) => {
+    if (user?.role !== 'admin' || payingId) return;
+    if (isPaid) { saveTicketPayment(paymentId, true); return; }
+    const row = ticketPayments.find(x => x.id === paymentId);
+    openActionModal({
+      title: `Un-mark ${row?.member_name || 'this member'}'s payment?`,
+      message: `This removes the record that ${row?.member_name || 'the member'} paid Round ${row?.round_number ?? ''}. They were already sent a thank-you SMS and it cannot be taken back. If you tick the payment again, they will be sent the SMS again.`,
+      confirmLabel: 'Yes, un-mark it',
+      danger: true,
+      onConfirm: async () => { await saveTicketPayment(paymentId, false, { throwOnError: true }); },
+    });
+  };
+
+  const saveTicketPayment = async (paymentId, isPaid, { throwOnError = false } = {}) => {
     if (!selectedTicketIdState) return;
+    setPayingId(paymentId);
     try {
       const res = await api.put(`/tickets/${selectedTicketIdState}/payments`, {
         payment_id: paymentId,
         is_paid: isPaid
       });
       const memberName = ticketPayments.find(x => x.id === paymentId)?.member_name || 'the member';
+      if (res.unchanged) { showToast('That payment was already updated.', 'info'); handleFetchTicketPaymentsByRound(ticketPaymentFilterRound); return; }
       showToast(res.sms === 'sent' ? `Payment saved. A thank-you SMS was sent to ${memberName}.` : res.sms === 'no_phone' ? `Payment saved. ${memberName} has no phone number on file, so no SMS was sent.` : res.sms === 'failed' ? `Payment saved, but the SMS to ${memberName} could not be sent. Check More → SMS Log.` : res.sms === 'mocked' ? `Payment saved. No SMS was sent to ${memberName} because Text.lk is not set up for this organisation (see More → SMS Log).` : 'Payment status updated.');
       // Refresh payments list without full detail reload
       handleFetchTicketPaymentsByRound(ticketPaymentFilterRound);
     } catch (err) {
+      if (throwOnError) throw err;
       setError(err.message);
+    } finally {
+      setPayingId(null);
     }
   };
 
@@ -4212,8 +4233,10 @@ export default function LendApp() {
                                         <input
                                           type="checkbox"
                                           checked={p.is_paid}
+                                          disabled={user.role !== 'admin' || payingId === p.id}
+                                          title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
                                           onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                          style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent-emerald)' }}
+                                          style={{ width: '18px', height: '18px', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed', accentColor: 'var(--accent-emerald)' }}
                                         />
                                         <span style={{ fontSize: '12px', fontWeight: 'bold', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
                                           {p.is_paid ? 'Collected' : 'Pending'}
@@ -4276,8 +4299,10 @@ export default function LendApp() {
                                     <input
                                       type="checkbox"
                                       checked={p.is_paid}
+                                      disabled={user.role !== 'admin' || payingId === p.id}
+                                      title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
                                       onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                      style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
+                                      style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed' }}
                                     />
                                     <span style={{ fontSize: '12px', fontWeight: 'bold', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
                                       {p.is_paid ? 'Collected' : 'Pending'}
