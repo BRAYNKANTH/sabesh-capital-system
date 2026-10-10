@@ -90,8 +90,16 @@ export async function PUT(request, { params }) {
     if (justPaid) {
       const member = await db('ticket_members').where({ id: payment.member_id }).first();
       if (member?.phone) {
-        sms = 'sent';
-        notifyChitPaymentReceived(payment_id).catch((err) => logError('Chit payment SMS failed', err, { paymentId: payment_id }));
+        // Awaited on purpose: on Vercel a function can be frozen the moment it
+        // replies, which would cut off an un-awaited SMS request. A failure
+        // here must never fail the payment itself, so it is caught and logged.
+        try {
+          const result = await notifyChitPaymentReceived(payment_id);
+          sms = result?.mocked ? 'mocked' : result?.failed ? 'failed' : result?.sent ? 'sent' : 'none';
+        } catch (err) {
+          sms = 'failed';
+          logError('Chit payment SMS failed', err, { paymentId: payment_id });
+        }
       } else {
         sms = 'no_phone';
       }

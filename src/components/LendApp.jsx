@@ -1802,7 +1802,7 @@ export default function LendApp() {
         is_paid: isPaid
       });
       const memberName = ticketPayments.find(x => x.id === paymentId)?.member_name || 'the member';
-      showToast(res.sms === 'sent' ? `Payment saved. A thank-you SMS was sent to ${memberName}.` : res.sms === 'no_phone' ? `Payment saved. ${memberName} has no phone number on file, so no SMS was sent.` : 'Payment status updated.');
+      showToast(res.sms === 'sent' ? `Payment saved. A thank-you SMS was sent to ${memberName}.` : res.sms === 'no_phone' ? `Payment saved. ${memberName} has no phone number on file, so no SMS was sent.` : res.sms === 'failed' ? `Payment saved, but the SMS to ${memberName} could not be sent. Check More → SMS Log.` : res.sms === 'mocked' ? `Payment saved. No SMS was sent to ${memberName} because Text.lk is not set up for this organisation (see More → SMS Log).` : 'Payment status updated.');
       // Refresh payments list without full detail reload
       handleFetchTicketPaymentsByRound(ticketPaymentFilterRound);
     } catch (err) {

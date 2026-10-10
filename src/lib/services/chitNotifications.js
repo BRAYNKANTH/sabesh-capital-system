@@ -38,6 +38,7 @@ export async function notifyChitPaymentReceived(paymentId) {
   const nextRound = payment.next_round_date ? ` Next round: ${dateText(payment.next_round_date)}.` : '';
   const message = `Dear ${payment.member_name}, we received your payment of ${money(payment.amount_per_member)} for ${payment.group_name} (Round ${payment.round_number}) on ${dateText(payment.payment_date || new Date())}. Thank you! Rounds paid so far: ${paidCount} of ${roundsRun}.${nextRound} ${org}`;
 
-  await sendNotification({ recipientName: payment.member_name, phone: payment.member_phone, message, role: 'chit member' });
-  return { sent: true };
+  const result = await sendNotification({ recipientName: payment.member_name, phone: payment.member_phone, message, role: 'chit member' });
+  // success = the SMS provider accepted it; mocked = Text.lk isn't configured, so nothing left the server.
+  return { sent: !!result.success && !result.mocked, mocked: !!result.mocked, failed: !result.success };
 }
