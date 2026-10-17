@@ -5,6 +5,7 @@ import { api } from '@/lib/apiClient.js';
 import { submitPaymentOrQueue, syncQueuedPayments, getQueueCount, onQueueChanged } from '@/lib/offlineQueue.js';
 import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
+import { ChitGuarantorFields, EMPTY_GUARANTOR } from './ChitGuarantorFields.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
   Home, Banknote, ClipboardList, Users, Landmark, KeyRound, LogOut,
@@ -328,6 +329,8 @@ export default function LendApp() {
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [newTicketForm, setNewTicketForm] = useState({ name: '', total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
   const [newMemberForm, setNewMemberForm] = useState({ name: '', phone: '' });
+  const [newMemberGuarantor, setNewMemberGuarantor] = useState(EMPTY_GUARANTOR);
+  const [guarantorDialog, setGuarantorDialog] = useState(null); // { member, form, loaded, saving, error, hasExisting }
   const [memberAddMode, setMemberAddMode] = useState('single'); // 'single' or 'bulk'
   const [bulkMemberText, setBulkMemberText] = useState('');
   const [bulkAddingMembers, setBulkAddingMembers] = useState(false);
@@ -1487,6 +1490,7 @@ export default function LendApp() {
 
       // Reset forms
       setNewMemberForm({ name: '', phone: '' });
+      setNewMemberGuarantor(EMPTY_GUARANTOR);
       setAuctionForm({
         bid_amount: '',
         winner_member_id: '',
@@ -1708,6 +1712,53 @@ export default function LendApp() {
     }
   };
 
+  const openChitGuarantorDialog = async (member) => {
+    setGuarantorDialog({ member, form: EMPTY_GUARANTOR, loaded: false, saving: false, error: '', hasExisting: false });
+    try {
+      const res = await api.get(`/tickets/${selectedTicket.id}/members/${member.id}/guarantor`);
+      const g = res.guarantor;
+      setGuarantorDialog((d) => d && ({
+        ...d, loaded: true, hasExisting: !!g,
+        form: g ? { full_name: g.full_name || '', nic_number: g.nic_number || '', phone: g.phone || '', address: g.address || '', nic_photos: g.nic_photo_urls || [], photo: g.photo_url || '' } : EMPTY_GUARANTOR
+      }));
+    } catch (err) {
+      setGuarantorDialog((d) => d && ({ ...d, loaded: true, error: err.message }));
+    }
+  };
+
+  const handleSaveChitGuarantor = async (e) => {
+    e.preventDefault();
+    const d = guarantorDialog;
+    if (!d || !selectedTicket) return;
+    setGuarantorDialog({ ...d, saving: true, error: '' });
+    try {
+      await api.put(`/tickets/${selectedTicket.id}/members/${d.member.id}/guarantor`, d.form);
+      showToast(`Guarantor saved for ${d.member.name}.`);
+      setGuarantorDialog(null);
+      fetchTicketDetails(selectedTicket.id);
+    } catch (err) {
+      setGuarantorDialog((cur) => cur && ({ ...cur, saving: false, error: err.message }));
+    }
+  };
+
+  const handleRemoveChitGuarantor = () => {
+    const d = guarantorDialog;
+    if (!d) return;
+    // Close the guarantor dialog first: the confirmation would otherwise sit underneath it.
+    setGuarantorDialog(null);
+    openActionModal({
+      title: `Remove ${d.member.name}'s guarantor?`,
+      message: 'This deletes the guarantor\'s details and photos. You can add a guarantor again later.',
+      confirmLabel: 'Remove Guarantor',
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/tickets/${selectedTicket.id}/members/${d.member.id}/guarantor`);
+        showToast('Guarantor removed.');
+        fetchTicketDetails(selectedTicket.id);
+      },
+    });
+  };
+
   const handleAddTicketMember = async (e) => {
     e.preventDefault();
     if (!selectedTicketIdState) return;
@@ -1716,10 +1767,12 @@ export default function LendApp() {
     try {
       const member = await api.post(`/tickets/${selectedTicketIdState}/members`, {
         name: newMemberForm.name,
-        phone: newMemberForm.phone
+        phone: newMemberForm.phone,
+        guarantor: newMemberGuarantor
       });
-      showToast(`Member '${newMemberForm.name}' added successfully.`);
+      showToast(`Member '${newMemberForm.name}' and their guarantor were added successfully.`);
       setNewMemberForm({ name: '', phone: '' });
+      setNewMemberGuarantor(EMPTY_GUARANTOR);
       // Refresh details
       fetchTicketDetails(selectedTicketIdState);
     } catch (err) {
@@ -2579,6 +2632,7 @@ export default function LendApp() {
   useEscapeToClose(!!editTicketForm, () => setEditTicketForm(null));
   useEscapeToClose(!!editMemberForm, () => setEditMemberForm(null));
   useEscapeToClose(!!editRoundForm, () => setEditRoundForm(null));
+  useEscapeToClose(!!guarantorDialog, () => setGuarantorDialog(null));
 
   // Keyboard focus is trapped inside whichever modal is open and restored
   // to the triggering element on close — see useFocusTrap's own comment.
@@ -2595,6 +2649,7 @@ export default function LendApp() {
   const editTicketModalRef = useRef(null);
   const editMemberModalRef = useRef(null);
   const editRoundModalRef = useRef(null);
+  const guarantorModalRef = useRef(null);
   useFocusTrap(!!selectedReceipt, receiptModalRef);
   useFocusTrap(showLoanAgreement, loanAgreementModalRef);
   useFocusTrap(showChangePassword, changePasswordModalRef);
@@ -2607,6 +2662,7 @@ export default function LendApp() {
   useFocusTrap(!!editTicketForm, editTicketModalRef);
   useFocusTrap(!!editMemberForm, editMemberModalRef);
   useFocusTrap(!!editRoundForm, editRoundModalRef);
+  useFocusTrap(!!guarantorDialog, guarantorModalRef);
 
   return (
     <div>
@@ -4084,6 +4140,13 @@ export default function LendApp() {
                                       </span>
                                     </div>
                                   )}
+                                  <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                    {m.guarantor ? (
+                                      <span>Guarantor: <strong>{m.guarantor.full_name}</strong>{m.guarantor.nic_photo_count > 0 ? ` · ${m.guarantor.nic_photo_count} NIC photo${m.guarantor.nic_photo_count === 1 ? '' : 's'}` : ''}{' '}<PhoneLink phone={m.guarantor.phone} showIcon={false} /></span>
+                                    ) : (
+                                      <span className="badge badge-pending" style={{ fontSize: '10px' }}>No guarantor yet</span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div>
                                   {wonAuction ? (
@@ -4094,6 +4157,7 @@ export default function LendApp() {
                                 </div>
                                 {user.role === 'admin' && (
                                   <div style={{ display: 'flex', gap: '6px', marginLeft: '10px' }}>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => openChitGuarantorDialog(m)}>{m.guarantor ? 'Guarantor' : 'Add guarantor'}</button>
                                     <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => openEditMember(m)} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`}>
                                       <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
                                     </button>
@@ -4144,6 +4208,11 @@ export default function LendApp() {
                           <div>
                             <label htmlFor="f-phone-number-3690" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Phone Number</label>
                             <input id="f-phone-number-3690" type="tel" className="glass-input" placeholder="e.g. 0771234567" value={newMemberForm.phone} onChange={e => setNewMemberForm(prev => ({ ...prev, phone: e.target.value }))} />
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '14px' }}>
+                            <h4 style={{ margin: '0 0 4px', fontSize: '15px' }}>Guarantor</h4>
+                            <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-muted)' }}>Every new member needs a guarantor. Name, NIC, phone and address are required; photos can be added now or later.</p>
+                            <ChitGuarantorFields idPrefix="newcg" value={newMemberGuarantor} onChange={setNewMemberGuarantor} onNotice={(msg) => showToast(msg, 'error')} />
                           </div>
                           <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>
                             Add Member to Roster
@@ -4530,6 +4599,30 @@ export default function LendApp() {
                     {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
                     <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Changes'}</button>
                   </form>
+                </div>
+              </div>
+            )}
+
+            {/* ---- Guarantor (view / add / edit) ---- */}
+            {guarantorDialog && (
+              <div className="receipt-modal-overlay" onClick={() => setGuarantorDialog(null)}>
+                <div ref={guarantorModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Guarantor" className="glass-card" style={{ maxWidth: '560px', width: '92%', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '10px' }}>
+                    <h3 style={{ fontSize: '20px', margin: 0 }}>Guarantor for {guarantorDialog.member.name}</h3>
+                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setGuarantorDialog(null)}>Close</button>
+                  </div>
+                  {!guarantorDialog.loaded ? (
+                    <p>Loading…</p>
+                  ) : (
+                    <form onSubmit={handleSaveChitGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <ChitGuarantorFields idPrefix="dlgcg" value={guarantorDialog.form} onChange={(form) => setGuarantorDialog((d) => ({ ...d, form }))} onNotice={(msg) => showToast(msg, 'error')} />
+                      {guarantorDialog.error && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{guarantorDialog.error}</div>}
+                      <button type="submit" className="glass-btn glass-btn-emerald" disabled={guarantorDialog.saving} style={{ width: '100%', padding: '12px' }}>{guarantorDialog.saving ? 'Saving…' : 'Save Guarantor'}</button>
+                      {guarantorDialog.hasExisting && (
+                        <button type="button" className="glass-btn glass-btn-rose" onClick={handleRemoveChitGuarantor} style={{ width: '100%', padding: '10px' }}>Remove Guarantor</button>
+                      )}
+                    </form>
+                  )}
                 </div>
               </div>
             )}

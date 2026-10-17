@@ -267,7 +267,8 @@ A chit group has a fixed number of members and runs one round per member. Each r
 
 ### 6.2 Members
 Open a group → **Member Roster**.
-- **Add** one at a time or paste a list (*Name, Phone*) in **bulk**.
+- **Add** one at a time or paste a list (*Name, Phone*) in **bulk**. When you add a member one at a time you also fill in their **Guarantor** (see below). Members added by bulk paste have no guarantor yet — add it afterwards from the roster.
+- **Guarantor** — every member should have a guarantor: **name, NIC number, phone and address** are required; you can attach **up to 4 NIC photos** (front, back…) and the guarantor's **own photo** (optional, can be added later). A member with no guarantor shows a yellow **No guarantor yet** tag. The roster shows the guarantor's name, how many NIC photos are on file and a tap-to-call phone number. Tap **Guarantor** (or **Add guarantor**) on a member to view the details and photos. **Only an admin** can add, change or remove a guarantor; agents can view it. Removing a member also removes their guarantor.
 - Tap a phone number to **call**; the green button opens WhatsApp.
 - **Edit** (pencil) changes a name or phone.
 - **Remove** (bin) deletes a member. It is **refused** if the member has already won a round (change that round's winner first) or has payments marked paid (un-tick them first).
