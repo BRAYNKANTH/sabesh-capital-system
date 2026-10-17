@@ -554,18 +554,16 @@ async function runIncrementalMigrations() {
   }
 
   // ---------------------------------------------------------------------
-  // Chit fund: each member can have a guarantor (name, NIC, phone, address,
-  // NIC photos and the guarantor's own photo). Separate table so the member
-  // list never carries the (large) base64 photos.
+  // Chit fund: each member has details (NIC, address, NIC photos, photo) and an
+  // optional guarantor (NIC + phone). Separate tables so the member list never
+  // carries the (large) base64 photos.
   // ---------------------------------------------------------------------
-  if (!(await db.schema.hasTable('ticket_member_guarantors'))) {
-    await db.schema.createTable('ticket_member_guarantors', (table) => {
+  if (!(await db.schema.hasTable('ticket_member_details'))) {
+    await db.schema.createTable('ticket_member_details', (table) => {
       table.uuid('id').primary().defaultTo(db.fn.uuid());
       table.uuid('ticket_id').notNullable().references('id').inTable('tickets').onDelete('CASCADE');
       table.uuid('member_id').notNullable().unique().references('id').inTable('ticket_members').onDelete('CASCADE');
-      table.string('full_name', 150).notNullable();
       table.string('nic_number', 20).notNullable();
-      table.string('phone', 30).notNullable();
       table.text('address').notNullable();
       table.jsonb('nic_photo_urls').nullable();
       table.text('photo_url').nullable();
@@ -573,7 +571,30 @@ async function runIncrementalMigrations() {
       table.timestamp('updated_at').defaultTo(db.fn.now());
       table.index('ticket_id');
     });
+    console.log("Migration: created table 'ticket_member_details'.");
+  }
+
+  // The optional guarantor is only a NIC number and a phone number. (An
+  // earlier version also asked for a name, address and photos; those columns
+  // are kept but no longer required.)
+  if (!(await db.schema.hasTable('ticket_member_guarantors'))) {
+    await db.schema.createTable('ticket_member_guarantors', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('ticket_id').notNullable().references('id').inTable('tickets').onDelete('CASCADE');
+      table.uuid('member_id').notNullable().unique().references('id').inTable('ticket_members').onDelete('CASCADE');
+      table.string('nic_number', 20).notNullable();
+      table.string('phone', 30).notNullable();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.timestamp('updated_at').defaultTo(db.fn.now());
+      table.index('ticket_id');
+    });
     console.log("Migration: created table 'ticket_member_guarantors'.");
+  } else {
+    for (const col of ['full_name', 'address']) {
+      if (await db.schema.hasColumn('ticket_member_guarantors', col)) {
+        await db.raw(`ALTER TABLE ticket_member_guarantors ALTER COLUMN ${col} DROP NOT NULL`);
+      }
+    }
   }
 
   // The pawn portal's own double-entry ledger (accounts: pawn_cash,

@@ -2,9 +2,12 @@
 
 import React from 'react';
 import { compressImageFile, MAX_KYC_PHOTOS } from '@/lib/clientImageCompress.js';
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 
-export const EMPTY_GUARANTOR = { full_name: '', nic_number: '', phone: '', address: '', nic_photos: [], photo: '' };
+// The member's own details. (Name and phone are the member's main fields.)
+export const EMPTY_MEMBER_DETAILS = { nic_number: '', address: '', nic_photos: [], photo: '' };
+// The optional guarantor: just a NIC number and a phone number.
+export const EMPTY_GUARANTOR = { nic_number: '', phone: '' };
 
 const labelStyle = { display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' };
 
@@ -20,10 +23,10 @@ function Thumb({ src, alt, onRemove }) {
   );
 }
 
-// The guarantor's details: name, NIC, phone, address (required), NIC photos
-// (several) and the guarantor's own photo (optional). Controlled by the parent:
-// value is { full_name, nic_number, phone, address, nic_photos[], photo }.
-export function ChitGuarantorFields({ idPrefix = 'cg', value, onChange, onNotice }) {
+// NIC number, address (required), NIC photos (several) and the member's own
+// photo (optional). Controlled by the parent: value is
+// { nic_number, address, nic_photos[], photo }.
+export function MemberDetailsFields({ idPrefix = 'md', value, onChange, onNotice }) {
   const set = (patch) => onChange({ ...value, ...patch });
 
   const addNicPhotos = async (e) => {
@@ -54,21 +57,11 @@ export function ChitGuarantorFields({ idPrefix = 'cg', value, onChange, onNotice
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div>
-        <label htmlFor={`${idPrefix}-name`} style={labelStyle}>Guarantor's full name *</label>
-        <input id={`${idPrefix}-name`} required type="text" maxLength={150} className="glass-input" value={value.full_name} onChange={(e) => set({ full_name: e.target.value })} />
-      </div>
-      <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-        <div>
-          <label htmlFor={`${idPrefix}-nic`} style={labelStyle}>Guarantor's NIC number *</label>
-          <input id={`${idPrefix}-nic`} required type="text" className="glass-input" placeholder="123456789V or 199012345678" value={value.nic_number} onChange={(e) => set({ nic_number: e.target.value })} />
-        </div>
-        <div>
-          <label htmlFor={`${idPrefix}-phone`} style={labelStyle}>Guarantor's phone number *</label>
-          <input id={`${idPrefix}-phone`} required type="tel" inputMode="tel" maxLength={30} className="glass-input" placeholder="e.g. 0771234567" value={value.phone} onChange={(e) => set({ phone: e.target.value })} />
-        </div>
+        <label htmlFor={`${idPrefix}-nic`} style={labelStyle}>NIC number *</label>
+        <input id={`${idPrefix}-nic`} required type="text" className="glass-input" placeholder="123456789V or 199012345678" value={value.nic_number} onChange={(e) => set({ nic_number: e.target.value })} />
       </div>
       <div>
-        <label htmlFor={`${idPrefix}-address`} style={labelStyle}>Guarantor's address *</label>
+        <label htmlFor={`${idPrefix}-address`} style={labelStyle}>Address *</label>
         <textarea id={`${idPrefix}-address`} required rows={2} className="glass-input" value={value.address} onChange={(e) => set({ address: e.target.value })} />
       </div>
       <div>
@@ -83,13 +76,43 @@ export function ChitGuarantorFields({ idPrefix = 'cg', value, onChange, onNotice
         )}
       </div>
       <div>
-        <label htmlFor={`${idPrefix}-photo`} style={labelStyle}>Guarantor's photo</label>
+        <label htmlFor={`${idPrefix}-photo`} style={labelStyle}>Member's photo</label>
         <input id={`${idPrefix}-photo`} type="file" accept="image/*" capture="user" className="glass-input" onChange={setPhoto} />
         {value.photo && (
           <div style={{ marginTop: '10px' }}>
-            <Thumb src={value.photo} alt="guarantor photo" onRemove={() => set({ photo: '' })} />
+            <Thumb src={value.photo} alt="member photo" onRemove={() => set({ photo: '' })} />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// One quiet line at the bottom of the form: "Add guarantor details (optional)".
+// value is null when there is no guarantor, otherwise { nic_number, phone }.
+export function GuarantorFields({ idPrefix = 'gf', value, onChange }) {
+  if (!value) {
+    return (
+      <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px', fontSize: '13px', alignSelf: 'flex-start' }} onClick={() => onChange({ ...EMPTY_GUARANTOR })}>
+        <Plus style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Add guarantor details (optional)
+      </button>
+    );
+  }
+  return (
+    <div style={{ border: '1px solid var(--border-light)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+        <strong style={{ fontSize: '14px' }}>Guarantor (optional)</strong>
+        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => onChange(null)}>Remove guarantor</button>
+      </div>
+      <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        <div>
+          <label htmlFor={`${idPrefix}-nic`} style={labelStyle}>Guarantor's NIC number *</label>
+          <input id={`${idPrefix}-nic`} required type="text" className="glass-input" placeholder="123456789V or 199012345678" value={value.nic_number} onChange={(e) => onChange({ ...value, nic_number: e.target.value })} />
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-phone`} style={labelStyle}>Guarantor's phone number *</label>
+          <input id={`${idPrefix}-phone`} required type="tel" inputMode="tel" maxLength={30} className="glass-input" placeholder="e.g. 0771234567" value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} />
+        </div>
       </div>
     </div>
   );

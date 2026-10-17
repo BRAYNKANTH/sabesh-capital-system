@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
-import { upsertGuarantor, ChitGuarantorError } from '@/lib/services/chitGuarantor.js';
+import { saveMemberDetails, ChitDetailsError } from '@/lib/services/chitMemberDetails.js';
 import { logError } from '@/lib/logger.js';
+
+// The roster must keep working even before the details tables exist (e.g. a
+// deploy that lands a moment before its migration): treat a missing table as empty.
+async function orEmptyIfNoTable(query) {
+  try {
+    return await query;
+  } catch (error) {
+    if (error && error.code === '42P01') return [];
+    throw error;
+  }
+}
 
 export async function GET(request, { params }) {
   try {
@@ -13,17 +24,24 @@ export async function GET(request, { params }) {
 
     const { id } = params;
     const members = await db('ticket_members').where({ ticket_id: id }).orderBy('name', 'asc');
-    // Guarantor summary only — the photos are large, so they are fetched on demand
-    // from /members/[memberId]/guarantor instead of riding along in every list.
-    const guarantors = await db('ticket_member_guarantors')
+    // Summaries only — the photos are large, so they are fetched on demand
+    // from /members/[memberId]/details instead of riding along in every list.
+    const details = await orEmptyIfNoTable(db('ticket_member_details')
       .where({ ticket_id: id })
-      .select('member_id', 'full_name', 'nic_number', 'phone', 'address', 'updated_at',
+      .select('member_id', 'nic_number', 'address', 'updated_at',
         db.raw('COALESCE(jsonb_array_length(nic_photo_urls), 0) as nic_photo_count'),
-        db.raw('(photo_url IS NOT NULL) as has_photo'));
-    const byMember = new Map(guarantors.map((g) => [g.member_id, g]));
+        db.raw('(photo_url IS NOT NULL) as has_photo')));
+    const guarantors = await orEmptyIfNoTable(db('ticket_member_guarantors').where({ ticket_id: id }).select('member_id', 'nic_number', 'phone', 'updated_at'));
+    const detailsByMember = new Map(details.map((d) => [d.member_id, d]));
+    const guarantorByMember = new Map(guarantors.map((g) => [g.member_id, g]));
     return NextResponse.json(members.map((m) => {
-      const g = byMember.get(m.id);
-      return { ...m, guarantor: g ? { full_name: g.full_name, nic_number: g.nic_number, phone: g.phone, address: g.address, nic_photo_count: Number(g.nic_photo_count), has_photo: !!g.has_photo, updated_at: g.updated_at } : null };
+      const d = detailsByMember.get(m.id);
+      const g = guarantorByMember.get(m.id);
+      return {
+        ...m,
+        details: d ? { nic_number: d.nic_number, address: d.address, nic_photo_count: Number(d.nic_photo_count), has_photo: !!d.has_photo, updated_at: d.updated_at } : null,
+        guarantor: g ? { nic_number: g.nic_number, phone: g.phone, updated_at: g.updated_at } : null
+      };
     }));
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
@@ -40,7 +58,7 @@ export async function POST(request, { params }) {
     }
 
     const { id } = params;
-    const { name, phone, guarantor } = await request.json();
+    const { name, phone, details, guarantor } = await request.json();
 
     if (!name) {
       return NextResponse.json({ message: 'Member name is required.' }, { status: 400 });
@@ -57,26 +75,26 @@ export async function POST(request, { params }) {
       return NextResponse.json({ message: `Cannot add member. Group member limit of ${ticket.member_count} reached.` }, { status: 400 });
     }
 
-    // The member and their guarantor are saved together or not at all.
+    // The member, their details and the optional guarantor are saved together or not at all.
     const member = await db.transaction(async (trx) => {
       const [created] = await trx('ticket_members').insert({
         ticket_id: id,
         name: name.trim(),
         phone: phone ? phone.trim() : null
       }).returning('*');
-      if (guarantor) await upsertGuarantor(id, created.id, guarantor, trx);
+      if (details || guarantor) await saveMemberDetails(id, created.id, { details: details || undefined, guarantor: guarantor || undefined }, trx);
       return created;
     });
 
     await db('audit_logs').insert({
       actor_id: user.id,
       action_type: 'TICKET_MEMBER_ADD',
-      description: `Added member '${name}' to ticket group '${ticket.name}'${guarantor ? ` with guarantor '${String(guarantor.full_name || '').trim()}'` : ''}.`
+      description: `Added member '${name}' to ticket group '${ticket.name}'${details ? ` with NIC ${String(details.nic_number || '').trim().toUpperCase()}` : ''}${guarantor ? ' and a guarantor' : ''}.`
     });
 
     return NextResponse.json(member, { status: 201 });
   } catch (error) {
-    if (error instanceof AuthError || error instanceof ChitGuarantorError) return NextResponse.json({ message: error.message }, { status: error.status });
+    if (error instanceof AuthError || error instanceof ChitDetailsError) return NextResponse.json({ message: error.message }, { status: error.status });
     logError('Add ticket member error', error, { method: request.method, url: request.url });
     return NextResponse.json({ message: 'Failed to add member.' }, { status: 500 });
   }
