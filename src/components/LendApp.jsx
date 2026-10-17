@@ -6,6 +6,7 @@ import { submitPaymentOrQueue, syncQueuedPayments, getQueueCount, onQueueChanged
 import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
 import { ChitGuarantorFields, EMPTY_GUARANTOR } from './ChitGuarantorFields.jsx';
+import ChitGuarantorsTab from './ChitGuarantorsTab.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
   Home, Banknote, ClipboardList, Users, Landmark, KeyRound, LogOut,
@@ -325,7 +326,7 @@ export default function LendApp() {
   const [ticketMembers, setTicketMembers] = useState([]);
   const [ticketAuctions, setTicketAuctions] = useState([]);
   const [ticketPayments, setTicketPayments] = useState([]);
-  const [activeTicketTab, setActiveTicketTab] = useState('auction'); // 'auction', 'members', 'history'
+  const [activeTicketTab, setActiveTicketTab] = useState('auction'); // 'auction', 'members', 'guarantors', 'payments', 'history'
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [newTicketForm, setNewTicketForm] = useState({ name: '', total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
   const [newMemberForm, setNewMemberForm] = useState({ name: '', phone: '' });
@@ -3915,6 +3916,9 @@ export default function LendApp() {
                   <button type="button" className={`glass-btn ${activeTicketTab === 'members' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('members')}>
                     <Users style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Member Roster ({ticketMembers.length})
                   </button>
+                  <button type="button" className={`glass-btn ${activeTicketTab === 'guarantors' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('guarantors')}>
+                    <ShieldCheck style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Guarantors ({ticketMembers.filter((m) => m.guarantor).length}/{ticketMembers.length})
+                  </button>
                   <button type="button" className={`glass-btn ${activeTicketTab === 'payments' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('payments')}>
                     <CreditCard style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Payments Tracker
                   </button>
@@ -4237,6 +4241,10 @@ export default function LendApp() {
                       )}
                     </div>
                   </div>
+                )}
+
+                {activeTicketTab === 'guarantors' && (
+                  <ChitGuarantorsTab ticketId={selectedTicket.id} members={ticketMembers} isAdmin={user.role === 'admin'} onEdit={openChitGuarantorDialog} />
                 )}
 
                 {activeTicketTab === 'payments' && (

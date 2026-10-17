@@ -17,13 +17,13 @@ export async function GET(request, { params }) {
     // from /members/[memberId]/guarantor instead of riding along in every list.
     const guarantors = await db('ticket_member_guarantors')
       .where({ ticket_id: id })
-      .select('member_id', 'full_name', 'nic_number', 'phone', 'address',
+      .select('member_id', 'full_name', 'nic_number', 'phone', 'address', 'updated_at',
         db.raw('COALESCE(jsonb_array_length(nic_photo_urls), 0) as nic_photo_count'),
         db.raw('(photo_url IS NOT NULL) as has_photo'));
     const byMember = new Map(guarantors.map((g) => [g.member_id, g]));
     return NextResponse.json(members.map((m) => {
       const g = byMember.get(m.id);
-      return { ...m, guarantor: g ? { full_name: g.full_name, nic_number: g.nic_number, phone: g.phone, address: g.address, nic_photo_count: Number(g.nic_photo_count), has_photo: !!g.has_photo } : null };
+      return { ...m, guarantor: g ? { full_name: g.full_name, nic_number: g.nic_number, phone: g.phone, address: g.address, nic_photo_count: Number(g.nic_photo_count), has_photo: !!g.has_photo, updated_at: g.updated_at } : null };
     }));
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
