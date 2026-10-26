@@ -597,6 +597,28 @@ async function runIncrementalMigrations() {
     }
   }
 
+  // Chit collections: every collected payment records how much came in and
+  // who collected it. A payment can also be collected BEFORE the round's
+  // auction is run (auction_id stays null until the auction links it), so
+  // auction_id is nullable and a member can only have one payment row per
+  // round.
+  await addColumnIfMissing('ticket_payments', 'amount', (t) => t.decimal('amount', 15, 2).nullable());
+  await addColumnIfMissing('ticket_payments', 'collected_by', (t) => t.uuid('collected_by').nullable().references('id').inTable('users').onDelete('SET NULL'));
+  await db.raw('ALTER TABLE ticket_payments ALTER COLUMN auction_id DROP NOT NULL');
+  try {
+    await db.raw('CREATE UNIQUE INDEX IF NOT EXISTS ticket_payments_ticket_member_round_unique ON ticket_payments (ticket_id, member_id, round_number)');
+  } catch (err) {
+    console.warn(`Migration: could not add the one-payment-per-member-per-round index (${err.message}). Duplicate payment rows exist and need cleaning up first.`);
+  }
+  // Paid rows from before this change: the amount collected was the round's
+  // per-member figure.
+  await db.raw(`
+    UPDATE ticket_payments p
+    SET amount = a.amount_per_member
+    FROM ticket_auctions a
+    WHERE p.auction_id = a.id AND p.is_paid = true AND p.amount IS NULL
+  `);
+
   // The pawn portal's own double-entry ledger (accounts: pawn_cash,
   // pawn_receivable_principal, pawn_receivable_interest, pawn_interest_revenue,
   // pawn_written_off_expense, pawn_surplus_payable).

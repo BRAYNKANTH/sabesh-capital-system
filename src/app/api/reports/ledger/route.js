@@ -16,7 +16,8 @@ const ACCOUNT_LABELS = {
   loan_receivable: 'Loans Receivable (Legacy, Pre-Split)',
   interest_revenue: 'Interest Revenue',
   penalty_revenue: 'Penalty Revenue',
-  written_off_expense: 'Bad Debt Written Off'
+  written_off_expense: 'Bad Debt Written Off',
+  chit_collections: 'Chit Fund Collections'
 };
 
 // Consolidated ledger / trial balance report (Admin only)

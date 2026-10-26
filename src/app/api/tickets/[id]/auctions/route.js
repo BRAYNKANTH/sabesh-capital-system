@@ -104,9 +104,17 @@ export async function POST(request, { params }) {
       // 2. Fetch all members in this group
       const members = await trx('ticket_members').where({ ticket_id: id });
       
-      // 3. Create ticket_payments entries for all members for this auction
-      if (members.length > 0) {
-        const paymentRows = members.map(m => ({
+      // 3. Link any payments already collected for this round before the
+      //    auction was run, then create entries for the members who have none yet.
+      await trx('ticket_payments')
+        .where({ ticket_id: id, round_number: ticket.current_round })
+        .whereNull('auction_id')
+        .update({ auction_id: inserted.id });
+      const linked = await trx('ticket_payments').where({ ticket_id: id, round_number: ticket.current_round }).select('member_id');
+      const linkedIds = new Set(linked.map(r => r.member_id));
+      const missing = members.filter(m => !linkedIds.has(m.id));
+      if (missing.length > 0) {
+        const paymentRows = missing.map(m => ({
           auction_id: inserted.id,
           ticket_id: id,
           member_id: m.id,

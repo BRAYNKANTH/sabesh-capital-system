@@ -7,6 +7,7 @@ import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
+import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
   Home, Banknote, ClipboardList, Users, Landmark, KeyRound, LogOut,
@@ -343,6 +344,7 @@ export default function LendApp() {
   const [editRoundForm, setEditRoundForm] = useState(null); // null = closed: { id, round_number, auction_date, winner_member_id }
   const [ticketDialogError, setTicketDialogError] = useState('');
   const [payingId, setPayingId] = useState(null); // chit payment currently being saved
+  const [collectionsRefresh, setCollectionsRefresh] = useState(0); // bumped whenever a chit collection changes, so the per-term summary reloads
   const EMPTY_SET_PW = { new_password: '', confirm: '', admin_password: '', require_change: true };
   const [setPwForm, setSetPwForm] = useState(EMPTY_SET_PW);
   const [setPwError, setSetPwError] = useState('');
@@ -1861,6 +1863,7 @@ export default function LendApp() {
         is_paid: isPaid
       });
       const memberName = ticketPayments.find(x => x.id === paymentId)?.member_name || 'the member';
+      setCollectionsRefresh(k => k + 1);
       if (res.unchanged) { showToast('That payment was already updated.'); handleFetchTicketPaymentsByRound(ticketPaymentFilterRound); return; }
       showToast(res.sms === 'sent' ? `Payment saved. A thank-you SMS was sent to ${memberName}.` : res.sms === 'no_phone' ? `Payment saved. ${memberName} has no phone number on file, so no SMS was sent.` : res.sms === 'failed' ? `Payment saved, but the SMS to ${memberName} could not be sent. Check More → SMS Log.` : res.sms === 'mocked' ? `Payment saved. No SMS was sent to ${memberName} because Text.lk is not set up for this organisation (see More → SMS Log).` : 'Payment status updated.', res.sms === 'failed' || res.sms === 'mocked' ? 'error' : 'success');
       // Refresh payments list without full detail reload
@@ -4238,6 +4241,15 @@ export default function LendApp() {
                 )}
 
                 {activeTicketTab === 'payments' && (
+                  <>
+                  <ChitCollectionsPanel
+                    ticket={selectedTicket}
+                    members={ticketMembers}
+                    isAdmin={user.role === 'admin'}
+                    refreshKey={collectionsRefresh}
+                    onChanged={() => handleFetchTicketPaymentsByRound(ticketPaymentFilterRound)}
+                    showToast={showToast}
+                  />
                   <div className="glass-card animate-fade-in" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                       <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}><CreditCard className="icon" /> Repayments Collection Tracker</h3>
@@ -4266,6 +4278,7 @@ export default function LendApp() {
                                 <th>Amount Due</th>
                                 <th>Collected?</th>
                                 <th>Date Paid</th>
+                                <th>Collected By</th>
                                 <th>Notify Reminder</th>
                               </tr>
                             </thead>
@@ -4312,6 +4325,14 @@ export default function LendApp() {
                                     </td>
                                     <td>{p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'}</td>
                                     <td>
+                                      {p.is_paid ? (
+                                        <>
+                                          <strong>LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.collected_by_name || 'collector not recorded'}</div>
+                                        </>
+                                      ) : '—'}
+                                    </td>
+                                    <td>
                                       {p.member_phone && !p.is_paid ? (
                                         <button className="glass-btn btn-whatsapp" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
                                           const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
@@ -4347,6 +4368,11 @@ export default function LendApp() {
                                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                     Due: <strong>LKR {auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</strong>
                                   </div>
+                                  {p.is_paid && (
+                                    <div style={{ fontSize: '12px', color: 'var(--accent-emerald)', marginTop: '4px' }}>
+                                      Collected LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{p.collected_by_name ? ` by ${p.collected_by_name}` : ''}
+                                    </div>
+                                  )}
                                   {p.member_phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                                       <PhoneLink phone={p.member_phone} />
@@ -4397,6 +4423,7 @@ export default function LendApp() {
                       </>
                     )}
                   </div>
+                  </>
                 )}
 
                 {activeTicketTab === 'history' && (
