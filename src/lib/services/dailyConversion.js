@@ -24,6 +24,22 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 export const CONVERTIBLE_STATUS = 'active';
 
 /**
+ * How many whole months a registered fixed term means, or null when it is not
+ * clear. Staff entered terms inconsistently: sometimes months (2), sometimes
+ * days (60, which is 2 months; 62 is already the 31-day form). So a multiple of
+ * 31 or 30 is read as days; a small number is read in the loan's own unit
+ * (months for monthly loans, weeks for weekly loans, 4 weeks = 1 month).
+ */
+export function termInMonths(interestType, duration) {
+  if (!Number.isInteger(duration) || duration <= 0) return null;
+  if (duration >= 31 && duration % 31 === 0) return duration / 31;
+  if (duration >= 30 && duration % 30 === 0) return duration / 30;
+  if (interestType === 'monthly' && duration <= 27) return duration;
+  if (interestType === 'weekly' && duration >= 4 && duration <= 24 && duration % 4 === 0) return duration / 4;
+  return null;
+}
+
+/**
  * @param loan  row from `loans`
  * @param ctx   { totalPaid, interestPaid, totalAccrued, now }
  *              totalPaid    - SUM(transactions.amount) for the loan
@@ -62,16 +78,11 @@ export function planDailyConversion(loan, ctx) {
   if (loan.collection_mode === 'fixed_term') {
     mode = 'fixed_term';
     const duration = Number(loan.duration_periods);
-    let months;
-    if (loan.interest_type === 'monthly') {
-      months = duration;
-    } else {
-      months = duration / 4; // a month is 4 weeks in this system's weekly math
-    }
-    if (!Number.isInteger(months) || months <= 0) {
+    const months = termInMonths(loan.interest_type, duration);
+    if (months === null) {
       return {
         skip: true,
-        reason: `Fixed term of ${duration} ${loan.interest_type === 'weekly' ? 'weeks' : 'months'} is not a whole number of months, so it cannot become a 31-day multiple automatically. Decide its term by hand.`,
+        reason: `Fixed term of ${duration} (${loan.interest_type} loan) is not clearly a whole number of months, so it cannot become a 31-day multiple automatically. Decide its term by hand.`,
       };
     }
 

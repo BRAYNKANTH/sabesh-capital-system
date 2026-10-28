@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDailyConversion, conversionLedgerRows } from './dailyConversion.js';
+import { planDailyConversion, conversionLedgerRows, termInMonths } from './dailyConversion.js';
 
 const baseLoan = {
   id: 'L1',
@@ -88,6 +88,36 @@ describe('planDailyConversion', () => {
     expect(plan.after.status).toBe('fully_paid');
     expect(plan.after.principal_outstanding).toBe(0);
     expect(plan.after.interest_balance).toBe(0);
+  });
+});
+
+describe('termInMonths', () => {
+  it('reads a term entered in days as months: 60 days is 2 months, 62 and 31 are already the 31-day form', () => {
+    expect(termInMonths('monthly', 60)).toBe(2);
+    expect(termInMonths('monthly', 30)).toBe(1);
+    expect(termInMonths('monthly', 90)).toBe(3);
+    expect(termInMonths('monthly', 62)).toBe(2);
+    expect(termInMonths('monthly', 31)).toBe(1);
+    expect(termInMonths('weekly', 60)).toBe(2);
+  });
+
+  it('reads small numbers in the loan\'s own unit', () => {
+    expect(termInMonths('monthly', 2)).toBe(2);
+    expect(termInMonths('monthly', 12)).toBe(12);
+    expect(termInMonths('weekly', 8)).toBe(2);
+    expect(termInMonths('weekly', 4)).toBe(1);
+  });
+
+  it('returns null when it is not clear', () => {
+    expect(termInMonths('monthly', 45)).toBeNull();
+    expect(termInMonths('weekly', 6)).toBeNull();
+    expect(termInMonths('monthly', 0)).toBeNull();
+  });
+
+  it('turns a monthly loan entered as 60 into a 62-day term, not 1860', () => {
+    const loan = { ...baseLoan, interest_type: 'monthly', collection_mode: 'fixed_term', duration_periods: 60 };
+    const plan = planDailyConversion(loan, { totalPaid: 0, interestPaid: 0, totalAccrued: 0, now });
+    expect(plan.after.duration_periods).toBe(62);
   });
 });
 

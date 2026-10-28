@@ -10,6 +10,10 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.sabesh
+
+# Data backups taken before bulk changes (contain borrower personal data)
+backups/
 
 # Logs
 *.log
