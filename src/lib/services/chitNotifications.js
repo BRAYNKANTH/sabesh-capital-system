@@ -42,3 +42,25 @@ export async function notifyChitPaymentReceived(paymentId) {
   // success = the SMS provider accepted it; mocked = Text.lk isn't configured, so nothing left the server.
   return { sent: !!result.success && !result.mocked, mocked: !!result.mocked, failed: !result.success };
 }
+
+// One thank-you SMS for a customer who paid several chits in one visit: each
+// chit's amount is listed separately, with the combined total.
+export async function notifyChitCombinedPaymentReceived(paymentIds) {
+  const rows = await db('ticket_payments')
+    .join('ticket_members', 'ticket_payments.member_id', 'ticket_members.id')
+    .join('tickets', 'ticket_payments.ticket_id', 'tickets.id')
+    .whereIn('ticket_payments.id', paymentIds)
+    .select('ticket_payments.round_number', 'ticket_payments.amount', 'ticket_payments.payment_date',
+      'ticket_members.name as member_name', 'ticket_members.phone as member_phone', 'tickets.name as group_name')
+    .orderBy('tickets.name', 'asc');
+  const phone = rows.map((r) => r.member_phone).find(Boolean);
+  if (!rows.length || !phone) return { sent: false, reason: 'no_phone' };
+
+  const org = await getOrgName();
+  const total = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const parts = rows.map((r) => `${money(r.amount)} for ${r.group_name} (Round ${r.round_number})`).join(', ');
+  const message = `Dear ${rows[0].member_name}, we received your payments on ${dateText(rows[0].payment_date || new Date())}: ${parts}. Total ${money(total)}. Thank you! ${org}`;
+
+  const result = await sendNotification({ recipientName: rows[0].member_name, phone, message, role: 'chit member' });
+  return { sent: !!result.success && !result.mocked, mocked: !!result.mocked, failed: !result.success };
+}

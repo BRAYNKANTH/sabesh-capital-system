@@ -8,6 +8,7 @@ import PawnPortal from './PawnPortal.jsx';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
+import ChitCollectCenter from './ChitCollectCenter.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
   Home, Banknote, ClipboardList, Users, Landmark, KeyRound, LogOut,
@@ -329,6 +330,7 @@ export default function LendApp() {
   const [ticketPayments, setTicketPayments] = useState([]);
   const [activeTicketTab, setActiveTicketTab] = useState('auction'); // 'auction', 'members', 'details', 'payments', 'history'
   const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [showCollectCenter, setShowCollectCenter] = useState(false); // combined "Collect chit payments" screen
   const [newTicketForm, setNewTicketForm] = useState({ name: '', total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
   const [newMemberForm, setNewMemberForm] = useState({ name: '', phone: '' });
   const [newMemberDetails, setNewMemberDetails] = useState(EMPTY_MEMBER_DETAILS);
@@ -3686,12 +3688,25 @@ export default function LendApp() {
                       <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Host-focused Chit Fund Management</span>
                     </div>
                   </div>
-                  {user.role === 'admin' && (
-                    <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCreateTicket(true)}>
-                      <Plus style={{ width: '16px', height: '16px' }} /> Create New Group
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <button className="glass-btn glass-btn-secondary" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCollectCenter(true)}>
+                      <CreditCard style={{ width: '16px', height: '16px' }} /> Collect Payments
                     </button>
-                  )}
+                    {user.role === 'admin' && (
+                      <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCreateTicket(true)}>
+                        <Plus style={{ width: '16px', height: '16px' }} /> Create New Group
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {showCollectCenter && (
+                  <div className="receipt-modal-overlay" onClick={() => setShowCollectCenter(false)}>
+                    <div className="glass-card" role="dialog" aria-modal="true" aria-label="Collect chit payments" style={{ maxWidth: '640px', width: '94%', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                      <ChitCollectCenter isAdmin={user.role === 'admin'} onClose={() => setShowCollectCenter(false)} onChanged={() => setCollectionsRefresh(k => k + 1)} showToast={showToast} />
+                    </div>
+                  </div>
+                )}
 
                 {/* Create Ticket Group Modal */}
                 {showCreateTicket && (

@@ -83,6 +83,21 @@ export async function POST(request, { params }) {
         phone: phone ? phone.trim() : null
       }).returning('*');
       if (details || guarantor) await saveMemberDetails(id, created.id, { details: details || undefined, guarantor: guarantor || undefined }, trx);
+
+      // A member added after some rounds were already run has no payment rows
+      // for those rounds (they are created when each auction is run), so there
+      // would be nothing to tick as paid and no thank-you SMS could go out. Give
+      // them an unpaid row for every round already run.
+      const pastAuctions = await trx('ticket_auctions').where({ ticket_id: id }).select('id', 'round_number');
+      if (pastAuctions.length > 0) {
+        await trx('ticket_payments').insert(pastAuctions.map((a) => ({
+          auction_id: a.id,
+          ticket_id: id,
+          member_id: created.id,
+          round_number: a.round_number,
+          is_paid: false
+        })));
+      }
       return created;
     });
 
