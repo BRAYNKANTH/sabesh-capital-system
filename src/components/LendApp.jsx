@@ -8,7 +8,7 @@ import PawnPortal from './PawnPortal.jsx';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
-import ChitInstalmentBox from './ChitInstalmentBox.jsx';
+import ChitPaymentsTable from './ChitPaymentsTable.jsx';
 import ChitCollectCenter from './ChitCollectCenter.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
@@ -1856,18 +1856,6 @@ export default function LendApp() {
       onConfirm: async () => { await saveTicketPayment(paymentId, false, { throwOnError: true }); },
     });
   };
-
-  // A member can pay a round in parts: the payment is "Partial" until what has
-  // been collected reaches the amount due, then "Collected".
-  // Before the round's auction is run there is no amount due, so money taken
-  // then shows as "Received" until the auction decides if it covers the due.
-  const paymentStatus = (p) => (p.is_paid ? 'Collected' : parseFloat(p.amount) > 0 ? (p.amount_due == null ? 'Received' : 'Partial') : 'Pending');
-  const paymentStatusColor = (p) => (p.is_paid ? 'var(--accent-emerald)' : parseFloat(p.amount) > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)');
-  // Whole cents, so 0.1 + 0.2 style noise can never show as a balance.
-  const toCents = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
-  const paymentBalance = (p) => (p.amount_due === null || p.amount_due === undefined ? null : Math.max(0, toCents(toCents(p.amount_due) - toCents(p.amount))));
-  // Money taken before the auction can turn out to be more than the amount due.
-  const paymentOverpaid = (p) => (p.amount_due === null || p.amount_due === undefined ? 0 : Math.max(0, toCents(toCents(p.amount) - toCents(p.amount_due))));
 
   // One Payments Tracker for everything: the rounds already auctioned, plus the
   // round still to be run. For that round there is no amount due yet, so every
@@ -4313,7 +4301,7 @@ export default function LendApp() {
                       {/* Round selector */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Round:</span>
-                        <select className="glass-input" style={{ width: pendingRound ? '230px' : '110px', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
+                        <select className="glass-input" style={{ width: pendingRound ? '230px' : '110px', maxWidth: '100%', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
                           {Array.from({ length: selectedTicket.status === 'completed' ? selectedTicket.member_count : selectedTicket.current_round - 1 }, (_, i) => i + 1).map(r => (
                             <option key={r} value={r}>Round {r}</option>
                           ))}
@@ -4330,154 +4318,13 @@ export default function LendApp() {
                     {trackerRows.length === 0 ? (
                       <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>{viewingPendingRound ? 'Add members to the group first.' : 'No payments logged yet. Settle an auction round to generate payment logs.'}</p>
                     ) : (
-                      <>
-                        <div className="desktop-only" style={{ overflowX: 'auto' }}>
-                          <table className="glass-table">
-                            <thead>
-                              <tr>
-                                <th>Member Name</th>
-                                <th>Contact</th>
-                                <th>Amount Due</th>
-                                <th>Paid</th>
-                                <th>Balance</th>
-                                <th>Status</th>
-                                <th>Date Paid</th>
-                                <th>Collected By</th>
-                                {user.role === 'admin' && <th>Collect Amount</th>}
-                                <th>Notify Reminder</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {trackerRows.map(p => {
-                                const auction = ticketAuctions.find(a => a.round_number === p.round_number);
-                                return (
-                                  <tr key={p.id || p.member_id}>
-                                    <td>
-                                      <strong>{p.member_name}</strong>
-                                    </td>
-                                    <td>
-                                      {p.member_phone ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <PhoneLink phone={p.member_phone} showIcon={false} />
-                                          <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                                            <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call">
-                                              <Phone style={{ width: '11px', height: '11px' }} />
-                                            </a>
-                                            <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp">
-                                              <MessageSquare style={{ width: '11px', height: '11px' }} />
-                                            </a>
-                                          </span>
-                                        </div>
-                                      ) : (
-                                        <span style={{ color: 'var(--text-muted)' }}>—</span>
-                                      )}
-                                    </td>
-                                    <td style={{ fontWeight: 'bold' }}>{auction ? `LKR ${parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '12px' }}>Set when the auction is run</span>}</td>
-                                    <td style={{ fontWeight: 'bold', color: parseFloat(p.amount) > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
-                                      {parseFloat(p.amount) > 0 ? `LKR ${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                                    </td>
-                                    <td style={{ fontWeight: 'bold', color: paymentBalance(p) > 0 ? 'var(--accent-rose)' : paymentOverpaid(p) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
-                                      {paymentBalance(p) === null ? '—' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : paymentOverpaid(p) > 0 ? `Overpaid LKR ${paymentOverpaid(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                                    </td>
-                                    <td>
-                                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
-                                        {paymentStatus(p)}
-                                      </span>
-                                    </td>
-                                    <td>{p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'}</td>
-                                    <td>
-                                      {parseFloat(p.amount) > 0 ? (p.collected_by_name || 'collector not recorded') : '—'}
-                                    </td>
-                                    {user.role === 'admin' && (
-                                      <td>
-                                        <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />
-                                      </td>
-                                    )}
-                                    <td>
-                                      {p.member_phone && !p.is_paid && p.amount_due != null ? (
-                                        <button className="glass-btn btn-whatsapp" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
-                                          const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
-                                          const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
-                                          const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
-                                            `Group: *${selectedTicket.name}*\n` +
-                                            `Round: *Round ${p.round_number}*\n` +
-                                            `${paymentBalance(p) !== null && parseFloat(p.amount) > 0 ? 'Balance Due' : 'Amount Due'}: *LKR ${paymentBalance(p) !== null ? paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
-                                            `Please make your payment to the host. Thank you!`;
-                                          window.open(`https://wa.me/${int}?text=${encodeURIComponent(txt)}`, '_blank');
-                                        }}>
-                                          Notify
-                                        </button>
-                                      ) : (
-                                        <span style={{ color: 'var(--text-muted)' }}>—</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Mobile Checklist */}
-                        <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {trackerRows.map(p => {
-                            const auction = ticketAuctions.find(a => a.round_number === p.round_number);
-                            return (
-                              <div key={p.id || p.member_id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '14px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                  <strong style={{ display: 'block', fontSize: '14px' }}>{p.member_name}</strong>
-                                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                    Due: {auction ? <strong>LKR {parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> : <span style={{ color: 'var(--text-muted)' }}>set when the auction is run</span>}
-                                  </div>
-                                  {parseFloat(p.amount) > 0 && (
-                                    <div style={{ fontSize: '12px', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--accent-gold)', marginTop: '4px' }}>
-                                      {p.is_paid ? 'Collected' : 'Paid'} LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{p.collected_by_name ? ` by ${p.collected_by_name}` : ''}
-                                      {!p.is_paid && paymentBalance(p) !== null && (
-                                        <strong style={{ display: 'block', color: 'var(--accent-rose)' }}>Balance LKR {paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                                      )}
-                                    </div>
-                                  )}
-                                  {user.role === 'admin' && (
-                                    <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />
-                                  )}
-                                  {p.member_phone && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                      <PhoneLink phone={p.member_phone} />
-                                      <span className="quick-contact-actions" style={{ display: 'flex', gap: '4px' }}>
-                                        <a href={`tel:${p.member_phone}`} className="quick-contact-btn phone" title="Call">
-                                          <Phone style={{ width: '11px', height: '11px' }} />
-                                        </a>
-                                        <a href={`https://wa.me/${(p.member_phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (p.member_phone || '').replace(/[^0-9]/g, '').slice(1) : (p.member_phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp">
-                                          <MessageSquare style={{ width: '11px', height: '11px' }} />
-                                        </a>
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
-                                    {paymentStatus(p)}
-                                  </span>
-                                  {p.member_phone && !p.is_paid && p.amount_due != null && (
-                                    <button className="glass-btn btn-whatsapp" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => {
-                                      const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
-                                      const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
-                                      const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
-                                        `Group: *${selectedTicket.name}*\n` +
-                                        `Round: *Round ${p.round_number}*\n` +
-                                        `${paymentBalance(p) !== null && parseFloat(p.amount) > 0 ? 'Balance Due' : 'Amount Due'}: *LKR ${paymentBalance(p) !== null ? paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
-                                        `Please make your payment to the host. Thank you!`;
-                                      window.open(`https://wa.me/${int}?text=${encodeURIComponent(txt)}`, '_blank');
-                                    }}>
-                                      Notify
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
+                      <ChitPaymentsTable
+                        rows={trackerRows}
+                        isAdmin={user.role === 'admin'}
+                        busyKey={payingId}
+                        onCollect={collectInstalment}
+                        onUndo={(row) => handleToggleTicketPayment(row.id, false)}
+                      />
                     )}
                   </div>
                   </>
