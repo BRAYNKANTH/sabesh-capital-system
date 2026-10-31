@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupByCustomer } from './chitCollections.js';
+import { groupByCustomer, groupTotals } from './chitCollections.js';
 
 const row = (o) => ({
   payment_id: 'p', member_id: 'm', member_name: 'Brayn', member_phone: '0707752433', ticket_id: 't1', group_name: 'Group A',
@@ -67,5 +67,31 @@ describe('groupByCustomer', () => {
 
   it('returns nothing for no rows', () => {
     expect(groupByCustomer([])).toEqual({ customers: [], totals: { pending: 0, pending_customers: 0 } });
+  });
+});
+
+describe('groupTotals', () => {
+  const rows = [
+    row({ payment_id: 'a', member_id: 'm1', ticket_id: 't1', group_name: 'Group A', group_code: 'A', amount_due: '1000.00' }),
+    row({ payment_id: 'b', member_id: 'm1b', ticket_id: 't1', group_name: 'Group A', group_code: 'A', amount_due: '1000.00', round_number: 3, amount: '400.00' }),
+    row({ payment_id: 'c', member_id: 'm2', ticket_id: 't2', group_name: 'Group B', group_code: 'B', amount_due: '5000.00', member_phone: '0771234567', member_name: 'Other' }),
+    row({ payment_id: 'd', member_id: 'm3', ticket_id: 't1', group_name: 'Group A', group_code: 'A', amount_due: '1000.00', amount: '1000.00', is_paid: true, member_phone: '0779999999', member_name: 'Paid up' })
+  ];
+
+  it('totals what is still owed per group, largest first', () => {
+    const totals = groupTotals(groupByCustomer(rows).customers);
+    expect(totals.map((g) => [g.code, g.pending])).toEqual([['B', 5000], ['A', 1600]]);
+  });
+
+  it('counts people once per group and ignores paid lines', () => {
+    const totals = groupTotals(groupByCustomer(rows).customers);
+    const a = totals.find((g) => g.code === 'A');
+    expect(a.people).toBe(1);     // the same person (same phone) owes on two rounds
+    expect(a.payments).toBe(2);
+  });
+
+  it('is empty when nobody owes anything', () => {
+    expect(groupTotals(groupByCustomer([rows[3]]).customers)).toEqual([]);
+    expect(groupTotals([])).toEqual([]);
   });
 });

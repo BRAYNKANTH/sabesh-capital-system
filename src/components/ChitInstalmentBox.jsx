@@ -42,18 +42,18 @@ export default function ChitInstalmentBox({ payment, onCollect, onUndo, busy, fu
         inputMode="decimal"
         className="glass-input"
         style={fullWidth
-          ? { flex: '1 1 140px', minWidth: 0, padding: '10px 12px', fontSize: '16px' }
+          ? { flex: '1 1 100%', minWidth: 0, padding: '10px 12px', fontSize: '16px' }
           : { width: '130px', padding: '5px 8px', fontSize: '12px' }}
         aria-label={`Amount collected from ${payment.member_name}`}
         placeholder="Amount"
         value={value}
         onChange={e => setValue(e.target.value)}
       />
-      <button type="submit" className="glass-btn glass-btn-emerald" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy || (value === '' && !(balance > 0))}>
+      <button type="submit" className="glass-btn glass-btn-emerald" style={fullWidth ? { flex: 1, padding: '12px 14px', fontSize: '14px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy || (value === '' && !(balance > 0))}>
         {busy ? 'Saving…' : takesBalance ? 'Collect balance' : 'Collect'}
       </button>
       {onUndo && collected > 0 && payment.id && (
-        <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
+        <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '12px 16px', fontSize: '14px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
           Undo
         </button>
       )}

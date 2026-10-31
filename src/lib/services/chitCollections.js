@@ -1,6 +1,25 @@
 import { normalizePhone } from '../phone.js';
 import { balanceDue, round2 } from './chitPayments.js';
 
+// Overall view by group: how much is still owed in each group and by how many
+// people, largest first. Takes the `customers` list produced by groupByCustomer.
+export function groupTotals(customers) {
+  const groups = new Map();
+  for (const c of customers) {
+    for (const x of c.chits) {
+      if (x.is_paid || !(x.balance > 0)) continue;
+      if (!groups.has(x.ticket_id)) groups.set(x.ticket_id, { ticket_id: x.ticket_id, name: x.group_name, code: x.group_code || null, pending: 0, payments: 0, people: new Set() });
+      const g = groups.get(x.ticket_id);
+      g.pending = round2(g.pending + x.balance);
+      g.payments += 1;
+      g.people.add(c.key);
+    }
+  }
+  return [...groups.values()]
+    .map((g) => ({ ticket_id: g.ticket_id, name: g.name, code: g.code, pending: g.pending, payments: g.payments, people: g.people.size }))
+    .sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+}
+
 // Turns payment rows (one per member per round, from any number of chit groups)
 // into one entry per PERSON. Members are matched across groups by phone number,
 // so someone in two or three groups appears once, with a line for every group
