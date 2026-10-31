@@ -10,6 +10,10 @@ import { postChitCollection } from './chitLedger.js';
 
 export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// A single instalment above this is a typing mistake (and would overflow the
+// numeric(15,2) column).
+export const MAX_INSTALMENT = 1e10;
+
 // What is still owed, or null when the amount due is not known yet.
 export function balanceDue(due, collected) {
   if (due === null || due === undefined || due === '') return null;
@@ -26,6 +30,7 @@ export function isFullyPaid(due, collected) {
 export function checkInstalment(amount, due, collected) {
   const value = round2(amount);
   if (!(value > 0)) return { error: 'Enter the amount collected.' };
+  if (value > MAX_INSTALMENT) return { error: 'That amount is too large. Check it and try again.' };
   const balance = balanceDue(due, collected);
   if (balance !== null) {
     if (balance <= 0) return { error: 'This payment is already fully paid.' };

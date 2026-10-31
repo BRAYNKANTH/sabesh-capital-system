@@ -40,8 +40,13 @@ export async function notifyChitPaymentReceived(paymentId, { received, balance }
   const nextRound = payment.next_round_date ? ` Next round: ${dateText(payment.next_round_date)}.` : '';
   const when = dateText(payment.payment_date || new Date());
   const got = money(received ?? payment.amount ?? payment.amount_per_member);
+  // Taken before the round's auction: there is no amount due yet, so no balance
+  // or "rounds paid" figure to quote.
+  const beforeAuction = payment.amount_per_member === null || payment.amount_per_member === undefined;
   const message = balance > 0
     ? `Dear ${payment.member_name}, we received ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Balance still to pay: ${money(balance)}. Thank you! ${org}`
+    : beforeAuction
+    ? `Dear ${payment.member_name}, we received ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Thank you! ${org}`
     : `Dear ${payment.member_name}, we received your payment of ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Thank you! Rounds paid so far: ${paidCount} of ${roundsRun}.${nextRound} ${org}`;
 
   const result = await sendNotification({ recipientName: payment.member_name, phone: payment.member_phone, message, role: 'chit member' });

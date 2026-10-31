@@ -64,6 +64,10 @@ describe('checkInstalment', () => {
     expect(checkInstalment(90000, null, 2000)).toEqual({ amount: 90000 });
   });
 
+  it('rejects an absurdly large amount (a typing mistake)', () => {
+    expect(checkInstalment(99999999999, null, 0).error).toMatch(/too large/);
+  });
+
   it('rounds to whole cents', () => {
     expect(checkInstalment('1000.005', 5000, 0).amount).toBe(round2(1000.005));
   });

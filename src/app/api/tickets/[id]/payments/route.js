@@ -101,6 +101,7 @@ export async function PUT(request, { params }) {
     // audit entry per real change.
     const result = await db.transaction(async (trx) => {
       const payment = await lockPayment(trx, payment_id, id);
+      if (!payment) return { unchanged: true }; // removed since it was looked up
       const collectedSoFar = round2(payment.amount);
 
       if (!is_paid) {

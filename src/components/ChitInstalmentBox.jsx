@@ -14,8 +14,18 @@ export default function ChitInstalmentBox({ payment, onCollect, onUndo, busy }) 
   const [value, setValue] = useState('');
   const collected = parseFloat(payment.amount) || 0;
   const due = payment.amount_due === null || payment.amount_due === undefined ? null : parseFloat(payment.amount_due);
-  const balance = due === null ? null : Math.max(0, due - collected);
+  const cents = (n) => Math.round(n * 100) / 100;
+  const balance = due === null ? null : Math.max(0, cents(cents(due) - cents(collected)));
   const takesBalance = value === '' && balance > 0;
+
+  // Fully paid: nothing more to collect, only a way to take it back.
+  if (payment.is_paid) {
+    return onUndo && payment.id ? (
+      <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 10px', fontSize: '11px', marginTop: '6px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
+        Undo payment
+      </button>
+    ) : null;
+  }
 
   const submit = async (e) => {
     e.preventDefault();

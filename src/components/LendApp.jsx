@@ -1850,7 +1850,7 @@ export default function LendApp() {
     const row = ticketPayments.find(x => x.id === paymentId);
     openActionModal({
       title: `Un-mark ${row?.member_name || 'this member'}'s payment?`,
-      message: `This takes back everything collected from ${row?.member_name || 'the member'} for Round ${row?.round_number ?? ''}${parseFloat(row?.amount) > 0 ? ` (LKR ${parseFloat(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}. They were already sent a thank-you SMS and it cannot be taken back. If you tick the payment again, they will be sent the SMS again.`,
+      message: `This takes back everything collected from ${row?.member_name || 'the member'} for Round ${row?.round_number ?? ''}${parseFloat(row?.amount) > 0 ? ` (LKR ${parseFloat(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}. They were already sent a thank-you SMS and it cannot be taken back. If you collect from them again, they will be sent a new SMS.`,
       confirmLabel: 'Yes, un-mark it',
       danger: true,
       onConfirm: async () => { await saveTicketPayment(paymentId, false, { throwOnError: true }); },
@@ -1863,7 +1863,11 @@ export default function LendApp() {
   // then shows as "Received" until the auction decides if it covers the due.
   const paymentStatus = (p) => (p.is_paid ? 'Collected' : parseFloat(p.amount) > 0 ? (p.amount_due == null ? 'Received' : 'Partial') : 'Pending');
   const paymentStatusColor = (p) => (p.is_paid ? 'var(--accent-emerald)' : parseFloat(p.amount) > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)');
-  const paymentBalance = (p) => (p.amount_due === null || p.amount_due === undefined ? null : Math.max(0, parseFloat(p.amount_due) - (parseFloat(p.amount) || 0)));
+  // Whole cents, so 0.1 + 0.2 style noise can never show as a balance.
+  const toCents = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+  const paymentBalance = (p) => (p.amount_due === null || p.amount_due === undefined ? null : Math.max(0, toCents(toCents(p.amount_due) - toCents(p.amount))));
+  // Money taken before the auction can turn out to be more than the amount due.
+  const paymentOverpaid = (p) => (p.amount_due === null || p.amount_due === undefined ? 0 : Math.max(0, toCents(toCents(p.amount) - toCents(p.amount_due))));
 
   // One Payments Tracker for everything: the rounds already auctioned, plus the
   // round still to be run. For that round there is no amount due yet, so every
@@ -4372,25 +4376,13 @@ export default function LendApp() {
                                     <td style={{ fontWeight: 'bold', color: parseFloat(p.amount) > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
                                       {parseFloat(p.amount) > 0 ? `LKR ${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                                     </td>
-                                    <td style={{ fontWeight: 'bold', color: paymentBalance(p) > 0 ? 'var(--accent-rose)' : 'var(--text-muted)' }}>
-                                      {paymentBalance(p) === null ? '—' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                                    <td style={{ fontWeight: 'bold', color: paymentBalance(p) > 0 ? 'var(--accent-rose)' : paymentOverpaid(p) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                                      {paymentBalance(p) === null ? '—' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : paymentOverpaid(p) > 0 ? `Overpaid LKR ${paymentOverpaid(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                                     </td>
                                     <td>
-                                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                        {p.amount_due != null && (
-                                          <input
-                                            type="checkbox"
-                                            checked={p.is_paid}
-                                            disabled={user.role !== 'admin' || payingId === p.id}
-                                            title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
-                                            onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                            style={{ width: '18px', height: '18px', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed', accentColor: 'var(--accent-emerald)' }}
-                                          />
-                                        )}
-                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
-                                          {paymentStatus(p)}
-                                        </span>
-                                      </label>
+                                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
+                                        {paymentStatus(p)}
+                                      </span>
                                     </td>
                                     <td>{p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'}</td>
                                     <td>
@@ -4398,7 +4390,7 @@ export default function LendApp() {
                                     </td>
                                     {user.role === 'admin' && (
                                       <td>
-                                        {p.is_paid ? '—' : <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />}
+                                        <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />
                                       </td>
                                     )}
                                     <td>
@@ -4445,7 +4437,7 @@ export default function LendApp() {
                                       )}
                                     </div>
                                   )}
-                                  {user.role === 'admin' && !p.is_paid && (
+                                  {user.role === 'admin' && (
                                     <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />
                                   )}
                                   {p.member_phone && (
@@ -4463,21 +4455,9 @@ export default function LendApp() {
                                   )}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
-                                    {p.amount_due != null && (
-                                      <input
-                                        type="checkbox"
-                                        checked={p.is_paid}
-                                        disabled={user.role !== 'admin' || payingId === p.id}
-                                        title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
-                                        onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                        style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed' }}
-                                      />
-                                    )}
-                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
-                                      {paymentStatus(p)}
-                                    </span>
-                                  </label>
+                                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
+                                    {paymentStatus(p)}
+                                  </span>
                                   {p.member_phone && !p.is_paid && p.amount_due != null && (
                                     <button className="glass-btn btn-whatsapp" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => {
                                       const clean = (p.member_phone || '').replace(/[^0-9]/g, '');

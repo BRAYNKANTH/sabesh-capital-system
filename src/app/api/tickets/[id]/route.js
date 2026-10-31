@@ -46,6 +46,14 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: 'Ticket group not found.' }, { status: 404 });
     }
 
+    // Collected money is posted to the ledger, and deleting the group would erase
+    // the payment records but leave that cash in the books. Reverse it first
+    // (Undo in the Payments tab) so the ledger nets to zero.
+    const [{ count: paidCount }] = await db('ticket_payments').where({ ticket_id: id }).andWhere('amount', '>', 0).count('id as count');
+    if (parseInt(paidCount, 10) > 0) {
+      return NextResponse.json({ message: `Money has been collected on ${paidCount} payment(s) in this group. Reverse them with Undo in the Payments tab first, then delete the group.` }, { status: 400 });
+    }
+
     const [{ count: memberCount }] = await db('ticket_members').where({ ticket_id: id }).count('id as count');
     const [{ count: auctionCount }] = await db('ticket_auctions').where({ ticket_id: id }).count('id as count');
 
