@@ -34,7 +34,9 @@ export default function ChitCollectionsPanel({ ticket, members, isAdmin, refresh
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  const paidByMember = new Map(roundPayments.filter(p => p.is_paid).map(p => [p.member_id, p]));
+  // Before the auction is run nothing is "paid" yet (the amount due is not set),
+  // so this shows what has been collected so far and lets more be added.
+  const collectedByMember = new Map(roundPayments.filter(p => parseFloat(p.amount) > 0).map(p => [p.member_id, p]));
 
   const collect = async (member) => {
     const amount = parseFloat(amounts[member.id]);
@@ -113,22 +115,25 @@ export default function ChitCollectionsPanel({ ticket, members, isAdmin, refresh
         <div className="glass-card" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '18px', margin: '0 0 4px', fontWeight: 'bold' }}>Collect for Round {round} (auction not run yet)</h3>
           <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '0 0 14px' }}>
-            Enter what each member paid. These payments are attached to Round {round} automatically when you run its auction.
+            Enter what each member paid. A member can pay in parts: collect again to add more. These payments are attached to Round {round} automatically when you run its auction, and any member who has not paid the full amount then shows a balance.
           </p>
           {members.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Add members to the group first.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {members.map(m => {
-                const paid = paidByMember.get(m.id);
+                const paid = collectedByMember.get(m.id);
                 return (
                   <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '12px', padding: '10px 14px' }}>
-                    <strong style={{ fontSize: '14px' }}>{m.name}</strong>
-                    {paid ? (
-                      <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--accent-emerald)' }}>
-                        Collected LKR {money(paid.amount)}{paid.collected_by_name ? ` by ${paid.collected_by_name}` : ''}
-                      </span>
-                    ) : isAdmin ? (
+                    <div>
+                      <strong style={{ fontSize: '14px' }}>{m.name}</strong>
+                      {paid && (
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--accent-emerald)' }}>
+                          Collected LKR {money(paid.amount)}{paid.collected_by_name ? ` by ${paid.collected_by_name}` : ''}
+                        </div>
+                      )}
+                    </div>
+                    {isAdmin ? (
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input
                           type="number"
@@ -143,11 +148,11 @@ export default function ChitCollectionsPanel({ ticket, members, isAdmin, refresh
                           onChange={e => setAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                         />
                         <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '6px 14px', fontSize: '12px' }} disabled={savingId === m.id} onClick={() => collect(m)}>
-                          {savingId === m.id ? 'Saving…' : 'Collect'}
+                          {savingId === m.id ? 'Saving…' : paid ? 'Collect more' : 'Collect'}
                         </button>
                       </div>
                     ) : (
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Pending</span>
+                      !paid && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Pending</span>
                     )}
                   </div>
                 );

@@ -18,12 +18,16 @@ export async function GET(request, { params }) {
       return NextResponse.json({ message: 'Ticket group not found.' }, { status: 404 });
     }
 
-    const [auctions, payments, [{ count: memberCount }]] = await Promise.all([
+    const [auctions, entries, paidRows, [{ count: memberCount }]] = await Promise.all([
       db('ticket_auctions').where({ ticket_id: id }).select('id', 'round_number', 'auction_date', 'amount_per_member'),
-      db('ticket_payments')
-        .leftJoin('users as collectors', 'ticket_payments.collected_by', 'collectors.id')
+      // One row per instalment (a reversal is a negative one), so partial
+      // payments and who collected each part are counted exactly.
+      db('ticket_payment_entries')
+        .join('ticket_payments', 'ticket_payment_entries.payment_id', 'ticket_payments.id')
+        .leftJoin('users as collectors', 'ticket_payment_entries.collected_by', 'collectors.id')
         .where('ticket_payments.ticket_id', id)
-        .select('ticket_payments.round_number', 'ticket_payments.is_paid', 'ticket_payments.amount', 'ticket_payments.payment_date', 'collectors.name as collector_name'),
+        .select('ticket_payments.round_number', 'ticket_payments.id as payment_id', 'ticket_payment_entries.amount', 'collectors.name as collector_name'),
+      db('ticket_payments').where({ ticket_id: id, is_paid: true }).select('round_number'),
       db('ticket_members').where({ ticket_id: id }).count('id as count')
     ]);
 
@@ -41,16 +45,31 @@ export async function GET(request, { params }) {
       r.due_per_member = parseFloat(a.amount_per_member);
       r.expected = r.due_per_member * totalMembers;
     }
-    for (const p of payments) {
-      const r = ensure(p.round_number);
-      if (!p.is_paid) continue;
-      const amt = parseFloat(p.amount) || 0;
-      r.paid_count += 1;
+    // "Paid" counts members whose payment is fully covered; "Collected" is every
+    // rupee received, including part payments.
+    for (const p of paidRows) ensure(p.round_number).paid_count += 1;
+
+    // Per collector and payment, the net of their instalments (a reversal
+    // cancels what was collected). A collector's count is the number of
+    // payments they still have money on.
+    const net = new Map();
+    for (const e of entries) {
+      const r = ensure(e.round_number);
+      const amt = parseFloat(e.amount) || 0;
       r.collected += amt;
-      const name = p.collector_name || 'Not recorded';
+      const name = e.collector_name || 'Not recorded';
+      const key = JSON.stringify([e.round_number, name, e.payment_id]);
+      const entry = net.get(key) || { round: e.round_number, name, amount: 0 };
+      entry.amount += amt;
+      net.set(key, entry);
       r.collectors[name] = r.collectors[name] || { name, count: 0, amount: 0 };
-      r.collectors[name].count += 1;
       r.collectors[name].amount += amt;
+    }
+    for (const { round, name, amount } of net.values()) {
+      if (amount > 0) rounds.get(round).collectors[name].count += 1;
+    }
+    for (const r of rounds.values()) {
+      r.collectors = Object.fromEntries(Object.entries(r.collectors).filter(([, c]) => Math.abs(c.amount) > 0.004));
     }
 
     const result = [...rounds.values()]

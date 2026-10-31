@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
 import { normalizePhone } from '@/lib/phone.js';
+import { balanceDue } from '@/lib/services/chitPayments.js';
 import { logError } from '@/lib/logger.js';
 
 // Everything to collect right now, one line per customer. A customer who is in
@@ -50,7 +51,9 @@ export async function GET(request) {
         round_number: row.round_number,
         amount_due: parseFloat(row.amount_due),
         is_paid: row.is_paid,
-        amount_paid: row.is_paid ? parseFloat(row.amount) || 0 : null,
+        // Everything collected so far (a part payment too) and what is left.
+        amount_paid: parseFloat(row.amount) > 0 ? parseFloat(row.amount) : null,
+        balance: balanceDue(row.amount_due, row.amount),
         payment_date: row.payment_date,
         collected_by_name: row.collected_by_name
       });
@@ -62,7 +65,7 @@ export async function GET(request) {
         ...c,
         chits: c.chits.sort((a, b) => a.group_name.localeCompare(b.group_name)),
         total_due: c.chits.reduce((s, x) => s + x.amount_due, 0),
-        total_pending: pending.reduce((s, x) => s + x.amount_due, 0),
+        total_pending: pending.reduce((s, x) => s + x.balance, 0),
         pending_count: pending.length
       };
     }).sort((a, b) => (b.pending_count > 0) - (a.pending_count > 0) || a.name.localeCompare(b.name));

@@ -81,7 +81,7 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
 
       {customers.map(c => {
         const picked = selectedFor(c);
-        const pickedTotal = picked.reduce((s, x) => s + x.amount_due, 0);
+        const pickedTotal = picked.reduce((s, x) => s + x.balance, 0);
         return (
           <div key={c.key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '14px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
@@ -97,8 +97,13 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
                   )}
                   <span><strong>{x.group_name}</strong> <span style={{ color: 'var(--text-muted)' }}>Round {x.round_number}</span></span>
                 </label>
-                <span style={{ fontWeight: 'bold', color: x.is_paid ? 'var(--accent-emerald)' : undefined }}>
-                  {x.is_paid ? `Paid LKR ${money(x.amount_paid)}${x.collected_by_name ? ` · ${x.collected_by_name}` : ''}` : `LKR ${money(x.amount_due)}`}
+                <span style={{ fontWeight: 'bold', textAlign: 'right', color: x.is_paid ? 'var(--accent-emerald)' : undefined }}>
+                  {x.is_paid ? `Paid LKR ${money(x.amount_paid)}${x.collected_by_name ? ` · ${x.collected_by_name}` : ''}` : `LKR ${money(x.balance)}`}
+                  {!x.is_paid && x.amount_paid > 0 && (
+                    <span style={{ display: 'block', fontSize: '11px', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+                      balance (paid LKR {money(x.amount_paid)} of {money(x.amount_due)})
+                    </span>
+                  )}
                 </span>
               </div>
             ))}

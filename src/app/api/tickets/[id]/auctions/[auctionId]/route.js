@@ -119,9 +119,9 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: `Only the latest round (round ${latest.max}) can be undone.` }, { status: 400 });
     }
 
-    const [{ count: paidCount }] = await db('ticket_payments').where({ auction_id: auctionId, is_paid: true }).count('id as count');
+    const [{ count: paidCount }] = await db('ticket_payments').where({ auction_id: auctionId }).andWhere('amount', '>', 0).count('id as count');
     if (parseInt(paidCount, 10) > 0) {
-      return NextResponse.json({ message: `${paidCount} payment(s) for round ${auction.round_number} are marked as paid. Un-tick them in the Payments Tracker first, then undo the round.` }, { status: 400 });
+      return NextResponse.json({ message: `${paidCount} payment(s) for round ${auction.round_number} have money collected. Reverse them in the Payments Tracker first, then undo the round.` }, { status: 400 });
     }
 
     const ticket = await db('tickets').where({ id }).first();

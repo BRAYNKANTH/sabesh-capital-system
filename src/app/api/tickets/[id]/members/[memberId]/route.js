@@ -82,9 +82,9 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: `${member.name} won round ${won.round_number}, so they can't be removed. Change the winner of that round first (Past Auctions History).` }, { status: 400 });
     }
 
-    const [{ count: paidCount }] = await db('ticket_payments').where({ ticket_id: id, member_id: memberId, is_paid: true }).count('id as count');
+    const [{ count: paidCount }] = await db('ticket_payments').where({ ticket_id: id, member_id: memberId }).andWhere('amount', '>', 0).count('id as count');
     if (parseInt(paidCount, 10) > 0) {
-      return NextResponse.json({ message: `${member.name} has ${paidCount} payment(s) marked as paid, so they can't be removed. If those were marked by mistake, un-tick them in the Payments Tracker first.` }, { status: 400 });
+      return NextResponse.json({ message: `${member.name} has money collected on ${paidCount} payment(s), so they can't be removed. If those were recorded by mistake, reverse them in the Payments Tracker first.` }, { status: 400 });
     }
 
     const [{ count: unpaidCount }] = await db('ticket_payments').where({ ticket_id: id, member_id: memberId }).count('id as count');

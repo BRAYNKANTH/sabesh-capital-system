@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
-import { postChitCollection } from '@/lib/services/chitLedger.js';
+import { addInstalment, balanceDue, lockPayment } from '@/lib/services/chitPayments.js';
 import { notifyChitPaymentReceived, notifyChitCombinedPaymentReceived } from '@/lib/services/chitNotifications.js';
 import { logError } from '@/lib/logger.js';
 
@@ -12,7 +12,8 @@ class CollectError extends Error {
 const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Collect several of one customer's chit payments in a single step (the
-// "combo" line). Every payment is collected in full at its own amount due.
+// "combo" line). Every payment is collected for what is still owed on it: its
+// full amount due, or the balance of one that was part-paid earlier.
 // All of them are saved together or none are: if any one was already
 // collected, nothing changes and the screen is told to refresh.
 export async function POST(request) {
@@ -33,24 +34,24 @@ export async function POST(request) {
         .join('ticket_members', 'ticket_payments.member_id', 'ticket_members.id')
         .join('ticket_auctions', 'ticket_payments.auction_id', 'ticket_auctions.id')
         .whereIn('ticket_payments.id', ids)
-        .select('ticket_payments.id', 'ticket_payments.round_number', 'ticket_payments.member_id', 'ticket_members.name as member_name',
-          'ticket_auctions.amount_per_member as amount_due');
+        .select('ticket_payments.id', 'ticket_payments.round_number', 'ticket_payments.member_id', 'ticket_members.name as member_name');
       if (rows.length !== ids.length) throw new CollectError('One of those payments was not found. Refresh and try again.', 404);
 
+      // Each chit is collected for whatever is still owed on it (the full
+      // amount, or the balance of one that was part-paid earlier).
       const done = [];
       for (const row of rows) {
-        const amount = parseFloat(row.amount_due);
-        const updated = await trx('ticket_payments')
-          .where({ id: row.id, is_paid: false })
-          .update({ is_paid: true, payment_date: db.fn.now(), amount, collected_by: user.id });
-        if (!updated) throw new CollectError(`${row.member_name}'s Round ${row.round_number} payment was already collected. Refresh the list.`, 409);
-        await postChitCollection(trx, amount);
+        const payment = await lockPayment(trx, row.id);
+        const balance = balanceDue(payment.amount_due, payment.amount);
+        if (!(balance > 0)) throw new CollectError(`${row.member_name}'s Round ${row.round_number} payment was already collected. Refresh the list.`, 409);
+        const added = await addInstalment(trx, payment, balance, user.id);
+        if (added.error) throw new CollectError(added.error, 409);
         await trx('audit_logs').insert({
           actor_id: user.id,
           action_type: 'TICKET_PAYMENT_TOGGLE',
-          description: `Collected LKR ${money(amount)} from ${row.member_name} (Round ${row.round_number}) in a combined collection.`
+          description: `Collected LKR ${money(added.amount)} from ${row.member_name} (Round ${row.round_number}) in a combined collection.`
         });
-        done.push({ id: row.id, member_id: row.member_id, member_name: row.member_name, amount });
+        done.push({ id: row.id, member_id: row.member_id, member_name: row.member_name, amount: added.amount });
       }
       return done;
     });
@@ -60,7 +61,9 @@ export async function POST(request) {
     let sms = 'none';
     try {
       const ids = collected.map((c) => c.id);
-      const result = ids.length === 1 ? await notifyChitPaymentReceived(ids[0]) : await notifyChitCombinedPaymentReceived(ids);
+      const result = ids.length === 1
+        ? await notifyChitPaymentReceived(ids[0], { received: collected[0].amount, balance: 0 })
+        : await notifyChitCombinedPaymentReceived(ids, Object.fromEntries(collected.map((c) => [c.id, c.amount])));
       sms = result?.reason === 'no_phone' ? 'no_phone' : result?.mocked ? 'mocked' : result?.failed ? 'failed' : result?.sent ? 'sent' : 'none';
     } catch (err) {
       sms = 'failed';

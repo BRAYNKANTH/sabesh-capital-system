@@ -8,6 +8,7 @@ import PawnPortal from './PawnPortal.jsx';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
+import ChitInstalmentBox from './ChitInstalmentBox.jsx';
 import ChitCollectCenter from './ChitCollectCenter.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
@@ -1849,11 +1850,39 @@ export default function LendApp() {
     const row = ticketPayments.find(x => x.id === paymentId);
     openActionModal({
       title: `Un-mark ${row?.member_name || 'this member'}'s payment?`,
-      message: `This removes the record that ${row?.member_name || 'the member'} paid Round ${row?.round_number ?? ''}. They were already sent a thank-you SMS and it cannot be taken back. If you tick the payment again, they will be sent the SMS again.`,
+      message: `This takes back everything collected from ${row?.member_name || 'the member'} for Round ${row?.round_number ?? ''}${parseFloat(row?.amount) > 0 ? ` (LKR ${parseFloat(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}. They were already sent a thank-you SMS and it cannot be taken back. If you tick the payment again, they will be sent the SMS again.`,
       confirmLabel: 'Yes, un-mark it',
       danger: true,
       onConfirm: async () => { await saveTicketPayment(paymentId, false, { throwOnError: true }); },
     });
+  };
+
+  // A member can pay a round in parts: the payment is "Partial" until what has
+  // been collected reaches the amount due, then "Collected".
+  const paymentStatus = (p) => (p.is_paid ? 'Collected' : parseFloat(p.amount) > 0 ? 'Partial' : 'Pending');
+  const paymentStatusColor = (p) => (p.is_paid ? 'var(--accent-emerald)' : parseFloat(p.amount) > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)');
+  const paymentBalance = (p) => (p.amount_due === null || p.amount_due === undefined ? null : Math.max(0, parseFloat(p.amount_due) - (parseFloat(p.amount) || 0)));
+
+  // Collects an amount (part or all of what is owed) from one member's payment.
+  // Resolves true when it was saved, so the amount box can clear itself.
+  const collectInstalment = async (paymentId, amount) => {
+    if (!selectedTicketIdState || payingId) return false;
+    setPayingId(paymentId);
+    try {
+      const res = await api.post(`/tickets/${selectedTicketIdState}/payments`, { payment_id: paymentId, amount });
+      const memberName = res.payment?.member_name || 'the member';
+      const left = res.balance > 0 ? ` LKR ${Number(res.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} still to pay.` : ' Fully paid.';
+      const sms = res.sms === 'sent' ? ' A thank-you SMS was sent.' : res.sms === 'no_phone' ? ' No phone number on file, so no SMS was sent.' : res.sms === 'failed' ? ' The SMS could not be sent (see More → SMS Log).' : res.sms === 'mocked' ? ' No SMS was sent because Text.lk is not set up.' : '';
+      showToast(`Collected LKR ${Number(res.collected).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} from ${memberName}.${left}${sms}`, res.sms === 'failed' || res.sms === 'mocked' ? 'error' : 'success');
+      setCollectionsRefresh(k => k + 1);
+      handleFetchTicketPaymentsByRound(ticketPaymentFilterRound);
+      return true;
+    } catch (err) {
+      showToast(err.message, 'error');
+      return false;
+    } finally {
+      setPayingId(null);
+    }
   };
 
   const saveTicketPayment = async (paymentId, isPaid, { throwOnError = false } = {}) => {
@@ -4333,19 +4362,25 @@ export default function LendApp() {
                                           onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
                                           style={{ width: '18px', height: '18px', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed', accentColor: 'var(--accent-emerald)' }}
                                         />
-                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
-                                          {p.is_paid ? 'Collected' : 'Pending'}
+                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
+                                          {paymentStatus(p)}
                                         </span>
                                       </label>
                                     </td>
                                     <td>{p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'}</td>
                                     <td>
-                                      {p.is_paid ? (
+                                      {parseFloat(p.amount) > 0 ? (
                                         <>
                                           <strong>LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                          {!p.is_paid && paymentBalance(p) !== null && (
+                                            <div style={{ fontSize: '11px', color: 'var(--accent-rose)', fontWeight: 'bold' }}>Balance LKR {paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                          )}
                                           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.collected_by_name || 'collector not recorded'}</div>
                                         </>
                                       ) : '—'}
+                                      {user.role === 'admin' && !p.is_paid && (
+                                        <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />
+                                      )}
                                     </td>
                                     <td>
                                       {p.member_phone && !p.is_paid ? (
@@ -4355,7 +4390,7 @@ export default function LendApp() {
                                           const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
                                             `Group: *${selectedTicket.name}*\n` +
                                             `Round: *Round ${p.round_number}*\n` +
-                                            `Amount Due: *LKR ${auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
+                                            `${paymentBalance(p) !== null && parseFloat(p.amount) > 0 ? 'Balance Due' : 'Amount Due'}: *LKR ${paymentBalance(p) !== null ? paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
                                             `Please make your payment to the host. Thank you!`;
                                           window.open(`https://wa.me/${int}?text=${encodeURIComponent(txt)}`, '_blank');
                                         }}>
@@ -4383,10 +4418,16 @@ export default function LendApp() {
                                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                     Due: <strong>LKR {auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</strong>
                                   </div>
-                                  {p.is_paid && (
-                                    <div style={{ fontSize: '12px', color: 'var(--accent-emerald)', marginTop: '4px' }}>
-                                      Collected LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{p.collected_by_name ? ` by ${p.collected_by_name}` : ''}
+                                  {parseFloat(p.amount) > 0 && (
+                                    <div style={{ fontSize: '12px', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--accent-gold)', marginTop: '4px' }}>
+                                      {p.is_paid ? 'Collected' : 'Paid'} LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{p.collected_by_name ? ` by ${p.collected_by_name}` : ''}
+                                      {!p.is_paid && paymentBalance(p) !== null && (
+                                        <strong style={{ display: 'block', color: 'var(--accent-rose)' }}>Balance LKR {paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                      )}
                                     </div>
+                                  )}
+                                  {user.role === 'admin' && !p.is_paid && (
+                                    <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />
                                   )}
                                   {p.member_phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
@@ -4412,8 +4453,8 @@ export default function LendApp() {
                                       onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
                                       style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed' }}
                                     />
-                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
-                                      {p.is_paid ? 'Collected' : 'Pending'}
+                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
+                                      {paymentStatus(p)}
                                     </span>
                                   </label>
                                   {p.member_phone && !p.is_paid && (
@@ -4423,7 +4464,7 @@ export default function LendApp() {
                                       const txt = `*${(orgSettings.org_name || 'CHIT FUND').toUpperCase()} - CHIT FUND PAYMENT REMINDER*\n\n` +
                                         `Group: *${selectedTicket.name}*\n` +
                                         `Round: *Round ${p.round_number}*\n` +
-                                        `Amount Due: *LKR ${auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
+                                        `${paymentBalance(p) !== null && parseFloat(p.amount) > 0 ? 'Balance Due' : 'Amount Due'}: *LKR ${paymentBalance(p) !== null ? paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}*\n\n` +
                                         `Please make your payment to the host. Thank you!`;
                                       window.open(`https://wa.me/${int}?text=${encodeURIComponent(txt)}`, '_blank');
                                     }}>

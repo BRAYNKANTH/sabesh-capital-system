@@ -619,6 +619,34 @@ async function runIncrementalMigrations() {
     WHERE p.auction_id = a.id AND p.is_paid = true AND p.amount IS NULL
   `);
 
+  // Partial payments: a member's payment for a round can come in several
+  // instalments. Each instalment is a row here (a reversal is a negative row);
+  // ticket_payments.amount is their running total and is_paid is true only once
+  // the total reaches the round's amount due.
+  if (!(await db.schema.hasTable('ticket_payment_entries'))) {
+    await db.schema.createTable('ticket_payment_entries', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('payment_id').notNullable().references('id').inTable('ticket_payments').onDelete('CASCADE');
+      table.decimal('amount', 15, 2).notNullable();
+      table.uuid('collected_by').nullable().references('id').inTable('users').onDelete('SET NULL');
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.index('payment_id');
+    });
+    console.log("Migration: created table 'ticket_payment_entries'.");
+  }
+  // Money already collected becomes one instalment each (the original collector
+  // and time are kept). Safe to run again: only payments with no entries yet.
+  await db.raw(`
+    INSERT INTO ticket_payment_entries (payment_id, amount, collected_by, created_at)
+    SELECT p.id, p.amount, p.collected_by, COALESCE(p.payment_date, NOW())
+    FROM ticket_payments p
+    WHERE p.amount > 0
+      AND NOT EXISTS (SELECT 1 FROM ticket_payment_entries e WHERE e.payment_id = p.id)
+  `);
+  // Money taken before a round's auction was run is not "paid" until the auction
+  // fixes the amount due; running the auction re-checks it.
+  await db.raw('UPDATE ticket_payments SET is_paid = false WHERE auction_id IS NULL AND is_paid = true');
+
   // The pawn portal's own double-entry ledger (accounts: pawn_cash,
   // pawn_receivable_principal, pawn_receivable_interest, pawn_interest_revenue,
   // pawn_written_off_expense, pawn_surplus_payable).

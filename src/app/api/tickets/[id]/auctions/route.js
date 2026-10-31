@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
+import { settleRoundPayments } from '@/lib/services/chitPayments.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request, { params }) {
@@ -110,6 +111,9 @@ export async function POST(request, { params }) {
         .where({ ticket_id: id, round_number: ticket.current_round })
         .whereNull('auction_id')
         .update({ auction_id: inserted.id });
+      // The amount due is now known: money collected earlier either covers it
+      // (the payment becomes paid) or leaves a balance.
+      await settleRoundPayments(trx, id, ticket.current_round);
       const linked = await trx('ticket_payments').where({ ticket_id: id, round_number: ticket.current_round }).select('member_id');
       const linkedIds = new Set(linked.map(r => r.member_id));
       const missing = members.filter(m => !linkedIds.has(m.id));
