@@ -331,7 +331,7 @@ export default function LendApp() {
   const [ticketMembers, setTicketMembers] = useState([]);
   const [ticketAuctions, setTicketAuctions] = useState([]);
   const [ticketPayments, setTicketPayments] = useState([]);
-  const [activeTicketTab, setActiveTicketTab] = useState('auction'); // 'auction', 'members', 'details', 'payments', 'history'
+  const [activeTicketTab, setActiveTicketTab] = useState('payments'); // 'auction', 'members', 'details', 'payments', 'history'
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [showCollectCenter, setShowCollectCenter] = useState(false); // combined "Collect chit payments" screen
   const [newTicketForm, setNewTicketForm] = useState({ name: '', code: '', codeEdited: false, total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
@@ -2693,6 +2693,17 @@ export default function LendApp() {
   useFocusTrap(showCreateTicket, createTicketModalRef);
   useFocusTrap(!!editingUser, editingUserModalRef);
   useFocusTrap(showMoreMenu, moreMenuModalRef);
+
+  // The browser tab / app-switcher title follows the chit screen (it is otherwise the same everywhere).
+  useEffect(() => {
+    if (view !== 'ticket-dashboard') return undefined;
+    const previous = document.title;
+    const org = orgSettings.org_name || 'Chit fund';
+    document.title = selectedTicket
+      ? `${selectedTicket.code ? selectedTicket.code + ' · ' : ''}${selectedTicket.name} – ${org}`
+      : `Chit groups – ${org}`;
+    return () => { document.title = previous; };
+  }, [view, selectedTicket, orgSettings.org_name]);
   useFocusTrap(!!actionModal, actionModalRef);
   useFocusTrap(!!editTicketForm, editTicketModalRef);
   useFocusTrap(!!editMemberForm, editMemberModalRef);
@@ -3092,7 +3103,49 @@ export default function LendApp() {
 
       {/* Header bar - Simple Solid White Bar */}
       {token && user && (
-        <header className="app-header animate-fade-in">
+        <header className={`app-header animate-fade-in${view === 'ticket-dashboard' ? ' app-header-chit' : ''}`}>
+          {/* Phones, chit screens: a slim app bar (back, screen title, edit, settings, log out). Desktop keeps the full header below. */}
+          {view === 'ticket-dashboard' && (
+            <div className="chit-appbar">
+              {selectedTicket ? (
+                <button type="button" className="chit-appbar-btn" aria-label="Back to groups" onClick={() => { setSelectedTicketIdState(null); setSelectedTicket(null); fetchTickets(); }}>
+                  <ArrowLeft aria-hidden="true" />
+                </button>
+              ) : (
+                <span className="chit-appbar-logo" aria-hidden="true">
+                  {orgSettings.logo_url ? <img src={orgSettings.logo_url} alt="" /> : <Landmark />}
+                </span>
+              )}
+              <div className="chit-appbar-title">
+                <strong>
+                  {selectedTicket ? (
+                    <>
+                      {selectedTicket.code && <ChitGroupChip code={selectedTicket.code} size="sm" />}
+                      <span className="chit-appbar-name">{selectedTicket.name}</span>
+                    </>
+                  ) : 'Chit groups'}
+                </strong>
+                <span>
+                  {selectedTicket
+                    ? (selectedTicket.status === 'completed'
+                      ? 'All rounds completed'
+                      : `Round ${selectedTicket.current_round} of ${selectedTicket.member_count}${selectedTicket.next_round_date ? ` · next ${new Date(selectedTicket.next_round_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}`)
+                    : (orgSettings.org_name || '')}
+                </span>
+              </div>
+              {selectedTicket && user.role === 'admin' && (
+                <button type="button" className="chit-appbar-btn" aria-label="Edit group" onClick={() => openEditTicket(selectedTicket)}>
+                  <Pencil aria-hidden="true" />
+                </button>
+              )}
+              <button type="button" className="chit-appbar-btn" aria-label="Settings" onClick={handleOpenSettings}>
+                <Settings aria-hidden="true" />
+              </button>
+              <button type="button" className="chit-appbar-btn" aria-label="Log out" onClick={handleLogout}>
+                <LogOut aria-hidden="true" />
+              </button>
+            </div>
+          )}
           <div className="app-header-info">
             <h1 style={{ fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               {orgSettings.logo_url ? (
@@ -3717,7 +3770,7 @@ export default function LendApp() {
             {/* Header / Group Selector list */}
             {!selectedTicket ? (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                <div className="mobile-hidden" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     {canSwitchPortals(user) && (
                       <button className="glass-btn glass-btn-secondary mobile-hidden" style={{ padding: '8px 14px' }} onClick={() => setView('portal')}>
@@ -3767,7 +3820,7 @@ export default function LendApp() {
                         <div>
                           <label htmlFor="f-ticket-group-code" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Short Code *</label>
                           <input id="f-ticket-group-code" required type="text" maxLength={12} autoCapitalize="characters" className="glass-input" placeholder="e.g. SMC-1" value={newTicketForm.code} onChange={e => setNewTicketForm(prev => ({ ...prev, code: e.target.value.toUpperCase(), codeEdited: true }))} />
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>A short label that tells groups apart wherever they are listed, even when names are alike. It must be different for every group and can be changed later.</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>A short label that tells groups apart wherever they are listed, even when names are alike. It must be different for every group and can be changed later.</span>
                         </div>
                         <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                           <div>
@@ -3806,7 +3859,7 @@ export default function LendApp() {
                             value={newTicketForm.starting_round}
                             onChange={e => setNewTicketForm(prev => ({ ...prev, starting_round: e.target.value }))}
                           />
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                             Only if this group already ran some rounds before you started using the app — e.g. already finished round 6 on paper, so enter 7 here. No history is recorded for the earlier rounds.
                           </span>
                         </div>
@@ -3864,12 +3917,12 @@ export default function LendApp() {
                       const totalVal = parseFloat(t.total_value);
                       const originalShare = totalVal / t.member_count;
                       return (
-                        <div key={t.id} className="glass-card" style={{ cursor: 'pointer', transition: 'transform 0.2s', padding: '24px', position: 'relative' }} onClick={() => fetchTicketDetails(t.id)}>
+                        <div key={t.id} className="glass-card" style={{ cursor: 'pointer', transition: 'transform 0.2s', padding: '24px', position: 'relative' }} onClick={() => { setActiveTicketTab('payments'); fetchTicketDetails(t.id); }}>
                           {user.role === 'admin' && (
                             <button
                               type="button"
                               className="glass-btn glass-btn-secondary"
-                              style={{ position: 'absolute', top: '14px', right: '58px', padding: '5px 9px', fontSize: '11px' }}
+                              style={{ position: 'absolute', top: '14px', right: '14px', padding: '5px 9px', fontSize: '12px' }}
                               onClick={(e) => openEditTicket(t, e)}
                               title={`Edit '${t.name}'`}
                               aria-label={`Edit ${t.name}`}
@@ -3877,16 +3930,7 @@ export default function LendApp() {
                               <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className="glass-btn glass-btn-rose"
-                            style={{ position: 'absolute', top: '14px', right: '14px', padding: '5px 9px', fontSize: '11px' }}
-                            onClick={(e) => handleDeleteTicket(t, e)}
-                            title={`Delete '${t.name}'`}
-                          >
-                            <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
-                          </button>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '88px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '52px' }}>
                             <div style={{ minWidth: 0 }}>
                               {t.code && <div style={{ marginBottom: '4px' }}><ChitGroupChip code={t.code} /></div>}
                               <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>{t.name}</h3>
@@ -3898,19 +3942,19 @@ export default function LendApp() {
 
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                             <div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Total Ticket Value</span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Total Ticket Value</span>
                               <span style={{ fontSize: '14px', fontWeight: '700' }}>LKR {totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Member Count</span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Member Count</span>
                               <span style={{ fontSize: '14px', fontWeight: '700' }}>{t.member_count} Members</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Original Share</span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Original Share</span>
                               <span style={{ fontSize: '14px', fontWeight: '700' }}>LKR {originalShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                             <div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Host Fee Rules</span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Host Fee Rules</span>
                               <span style={{ fontSize: '13px', fontWeight: '600' }}>
                                 {t.host_fee_type === 'percentage' ? `${t.host_fee_value}% Share` : `LKR ${parseFloat(t.host_fee_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Fixed`}
                               </span>
@@ -3930,7 +3974,7 @@ export default function LendApp() {
             ) : (
               /* Single Group Detail View */
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                <div className="mobile-hidden" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <button className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px' }} onClick={() => { setSelectedTicketIdState(null); setSelectedTicket(null); fetchTickets(); }}>
                     <ArrowLeft className="icon" /> Back to Groups List
                   </button>
@@ -3940,9 +3984,6 @@ export default function LendApp() {
                         <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => openEditTicket(selectedTicket)}>
                           <Pencil className="icon" /> Edit Group
                         </button>
-                        <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={(e) => handleDeleteTicket(selectedTicket, e, { leaveDetail: true })}>
-                          <Trash2 className="icon" /> Delete Group
-                        </button>
                       </>
                     )}
                     <span className="badge badge-active" style={{ background: 'var(--accent-emerald-light)', color: 'var(--accent-emerald)', padding: '6px 12px' }}>Total LKR {parseFloat(selectedTicket.total_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -3950,17 +3991,17 @@ export default function LendApp() {
                 </div>
 
                 <div className="glass-card" style={{ padding: '24px' }}>
-                  {selectedTicket.code && <div style={{ marginBottom: '6px' }}><ChitGroupChip code={selectedTicket.code} /></div>}
-                  <h2 style={{ fontSize: '26px', margin: '0 0 6px 0' }}>{selectedTicket.name}</h2>
+                  {selectedTicket.code && <div className="mobile-hidden" style={{ marginBottom: '6px' }}><ChitGroupChip code={selectedTicket.code} /></div>}
+                  <h2 className="mobile-hidden" style={{ fontSize: '26px', margin: '0 0 6px 0' }}>{selectedTicket.name}</h2>
                   <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     <span>Members: <strong>{ticketMembers.length} / {selectedTicket.member_count}</strong></span>
-                    <span>•</span>
+                    <span className="mobile-hidden">•</span>
                     <span>Start: <strong>{new Date(selectedTicket.start_date).toLocaleDateString()}</strong></span>
-                    <span>•</span>
+                    <span className="mobile-hidden">•</span>
                     <span>Current Round: <strong style={{ color: 'var(--accent-blue)' }}>{selectedTicket.status === 'completed' ? 'Completed' : selectedTicket.current_round}</strong></span>
                     {selectedTicket.next_round_date && (
                       <>
-                        <span>•</span>
+                        <span className="mobile-hidden">•</span>
                         <span style={{ color: 'var(--accent-gold)', fontWeight: 'bold' }}>Next Round Date: {new Date(selectedTicket.next_round_date).toLocaleDateString()}</span>
                       </>
                     )}
@@ -3968,20 +4009,20 @@ export default function LendApp() {
                 </div>
 
                 {/* Sub Tab Bar Selector */}
-                <div className="subtab-pill-bar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', borderBottom: '1px solid var(--border-light)', paddingBottom: '8px' }}>
-                  <button type="button" className={`glass-btn ${activeTicketTab === 'auction' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('auction')}>
+                <div className="subtab-pill-bar mobile-hidden" role="tablist" aria-label="Group sections" style={{ display: 'flex', gap: '8px', overflowX: 'auto', borderBottom: '1px solid var(--border-light)', paddingBottom: '8px' }}>
+                  <button type="button" role="tab" aria-selected={activeTicketTab === 'auction'} className={`glass-btn ${activeTicketTab === 'auction' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('auction')}>
                     <TrendingUp style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Round Auction & Notice
                   </button>
-                  <button type="button" className={`glass-btn ${activeTicketTab === 'members' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('members')}>
+                  <button type="button" role="tab" aria-selected={activeTicketTab === 'members'} className={`glass-btn ${activeTicketTab === 'members' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('members')}>
                     <Users style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Member Roster ({ticketMembers.length})
                   </button>
-                  <button type="button" className={`glass-btn ${activeTicketTab === 'details' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('details')}>
+                  <button type="button" role="tab" aria-selected={activeTicketTab === 'details'} className={`glass-btn ${activeTicketTab === 'details' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('details')}>
                     <IdCard style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Member Details ({ticketMembers.filter((m) => m.details).length}/{ticketMembers.length})
                   </button>
-                  <button type="button" className={`glass-btn ${activeTicketTab === 'payments' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('payments')}>
+                  <button type="button" role="tab" aria-selected={activeTicketTab === 'payments'} className={`glass-btn ${activeTicketTab === 'payments' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('payments')}>
                     <CreditCard style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Payments Tracker
                   </button>
-                  <button type="button" className={`glass-btn ${activeTicketTab === 'history' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('history')}>
+                  <button type="button" role="tab" aria-selected={activeTicketTab === 'history'} className={`glass-btn ${activeTicketTab === 'history' ? 'glass-btn-emerald' : 'glass-btn-secondary'}`} style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setActiveTicketTab('history')}>
                     <ScrollText style={{ width: '14px', height: '14px', marginRight: '4px' }} /> Past Auctions History ({ticketAuctions.length})
                   </button>
                 </div>
@@ -3998,28 +4039,28 @@ export default function LendApp() {
                       ) : (
                         <form onSubmit={handleRunTicketAuction} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                           <div>
-                            <label htmlFor="f-bid-amount-discount-3437" style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>BID AMOUNT (கழிவு / DISCOUNT) *</label>
+                            <label htmlFor="f-bid-amount-discount-3437" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>BID AMOUNT (கழிவு / DISCOUNT) *</label>
                             <input id="f-bid-amount-discount-3437" required type="number" inputMode="decimal" min="0" max={parseFloat(selectedTicket.total_value)} className="glass-input" placeholder="e.g. 130000" value={auctionForm.bid_amount} onChange={e => setAuctionForm(prev => ({ ...prev, bid_amount: e.target.value }))} />
                           </div>
 
                           <div>
-                            <label htmlFor="f-round-winner-3442" style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Round Winner</label>
+                            <label htmlFor="f-round-winner-3442" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Round Winner</label>
                             <select id="f-round-winner-3442" className="glass-input" value={auctionForm.winner_member_id} onChange={e => setAuctionForm(prev => ({ ...prev, winner_member_id: e.target.value }))}>
                               <option value="">-- No Winner Selected Yet --</option>
                               {ticketMembers.filter(m => !ticketAuctions.some(a => a.winner_member_id === m.id)).map(m => (
                                 <option key={m.id} value={m.id}>{m.name}</option>
                               ))}
                             </select>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Only shows members who haven't already won a previous round.</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Only shows members who haven't already won a previous round.</span>
                           </div>
 
                           <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             <div>
-                              <label htmlFor="f-auction-date-3454" style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Auction Date *</label>
+                              <label htmlFor="f-auction-date-3454" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Auction Date *</label>
                               <input id="f-auction-date-3454" required type="date" className="glass-input" value={auctionForm.auction_date} onChange={e => setAuctionForm(prev => ({ ...prev, auction_date: e.target.value }))} />
                             </div>
                             <div>
-                              <label htmlFor="f-next-round-date-3458" style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Next Round Date *</label>
+                              <label htmlFor="f-next-round-date-3458" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Next Round Date *</label>
                               <input id="f-next-round-date-3458" required type="date" className="glass-input" value={auctionForm.next_round_date} onChange={e => setAuctionForm(prev => ({ ...prev, next_round_date: e.target.value }))} />
                             </div>
                           </div>
@@ -4107,7 +4148,7 @@ export default function LendApp() {
 
                         return (
                           <div style={{ border: '1px solid var(--border-light)', borderRadius: '12px', padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent-emerald)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>📢 Last Completed Round {roundNum} Notice</span>
+                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--accent-emerald)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>📢 Last Completed Round {roundNum} Notice</span>
                             <div style={{ background: '#075e54', color: 'white', borderRadius: '8px', padding: '12px', fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px solid #128c7e', marginBottom: '10px' }}>
                               {noticeText}
                             </div>
@@ -4153,7 +4194,7 @@ export default function LendApp() {
 
                         return (
                           <div style={{ border: '1px dashed var(--border-light)', borderRadius: '12px', padding: '16px', background: 'rgba(255,255,255,0.01)' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>✏️ Next Round {roundNum} Draft Notice</span>
+                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>✏️ Next Round {roundNum} Draft Notice</span>
                             <div style={{ background: '#334155', color: 'white', borderRadius: '8px', padding: '12px', fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px solid var(--border-light)', marginBottom: '10px' }}>
                               {noticeText}
                             </div>
@@ -4175,6 +4216,15 @@ export default function LendApp() {
                   </div>
                 )}
 
+                {(activeTicketTab === 'members' || activeTicketTab === 'details') && (
+                  <div className="mobile-only">
+                    <div className="chit-seg" role="tablist" aria-label="Members view">
+                      <button type="button" role="tab" aria-selected={activeTicketTab === 'members'} onClick={() => setActiveTicketTab('members')}>Roster ({ticketMembers.length})</button>
+                      <button type="button" role="tab" aria-selected={activeTicketTab === 'details'} onClick={() => setActiveTicketTab('details')}>Details ({ticketMembers.filter((m) => m.details).length}/{ticketMembers.length})</button>
+                    </div>
+                  </div>
+                )}
+
                 {activeTicketTab === 'members' && (
                   <div className="responsive-grid-2-col animate-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                     {/* Roster list */}
@@ -4191,7 +4241,7 @@ export default function LendApp() {
                                 <div>
                                   <strong style={{ display: 'block', fontSize: '14px' }}>{idx + 1}. {m.name}</strong>
                                   {m.phone && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                       <PhoneLink phone={m.phone} />
                                       <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
                                         <a href={`tel:${m.phone}`} className="quick-contact-btn phone" title="Call Member">
@@ -4203,33 +4253,33 @@ export default function LendApp() {
                                       </span>
                                     </div>
                                   )}
-                                  <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                  <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                                     {m.details ? (
                                       <span>NIC <strong>{m.details.nic_number}</strong>{m.details.nic_photo_count > 0 ? ` · ${m.details.nic_photo_count} NIC photo${m.details.nic_photo_count === 1 ? '' : 's'}` : ''}</span>
                                     ) : (
-                                      <span className="badge badge-pending" style={{ fontSize: '10px' }}>No details yet</span>
+                                      <span className="badge badge-pending" style={{ fontSize: '12px' }}>No details yet</span>
                                     )}
                                   </div>
                                   {m.guarantor && (
-                                    <div style={{ marginTop: '2px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                    <div style={{ marginTop: '2px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                                       Guarantor: NIC <strong>{m.guarantor.nic_number}</strong> <PhoneLink phone={m.guarantor.phone} showIcon={false} />
                                     </div>
                                   )}
                                 </div>
                                 <div>
                                   {wonAuction ? (
-                                    <span className="badge badge-active" style={{ background: 'rgba(37, 84, 232, 0.1)', color: 'var(--accent-blue)', fontSize: '11px' }}>Won Round {wonAuction.round_number}</span>
+                                    <span className="badge badge-active" style={{ background: 'rgba(37, 84, 232, 0.1)', color: 'var(--accent-blue)', fontSize: '12px' }}>Won Round {wonAuction.round_number}</span>
                                   ) : (
-                                    <span className="badge badge-defaulted" style={{ fontSize: '11px' }}>Not Won</span>
+                                    <span className="badge badge-defaulted" style={{ fontSize: '12px' }}>Not Won</span>
                                   )}
                                 </div>
                                 {user.role === 'admin' && (
                                   <div style={{ display: 'flex', gap: '6px', marginLeft: '10px' }}>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => openMemberDetailsDialog(m)}>{m.details ? 'Details' : 'Add details'}</button>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => openEditMember(m)} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`}>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => openMemberDetailsDialog(m)}>{m.details ? 'Details' : 'Add details'}</button>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => openEditMember(m)} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`}>
                                       <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
                                     </button>
-                                    <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '5px 9px', fontSize: '11px' }} onClick={() => handleRemoveTicketMember(m)} title={`Remove ${m.name}`} aria-label={`Remove ${m.name}`}>
+                                    <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => handleRemoveTicketMember(m)} title={`Remove ${m.name}`} aria-label={`Remove ${m.name}`}>
                                       <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
                                     </button>
                                   </div>
@@ -4310,7 +4360,6 @@ export default function LendApp() {
 
                 {activeTicketTab === 'payments' && (
                   <>
-                  <ChitCollectionsPanel ticket={selectedTicket} refreshKey={collectionsRefresh} />
                   <div className="glass-card animate-fade-in" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '10px' }}>
                       <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}><CreditCard className="icon" /> Collect Payments</h3>
@@ -4344,6 +4393,7 @@ export default function LendApp() {
                       />
                     )}
                   </div>
+                  <ChitCollectionsPanel ticket={selectedTicket} refreshKey={collectionsRefresh} />
                   </>
                 )}
 
@@ -4388,13 +4438,13 @@ export default function LendApp() {
                                             <option key={m.id} value={m.id}>{m.name}</option>
                                           ))}
                                         </select>
-                                        <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '4px 8px', fontSize: '11px' }} onClick={() => handleAssignAuctionWinner(a.id)}>Save</button>
-                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '11px' }} onClick={() => { setAssigningWinnerFor(null); setAssignWinnerMemberId(''); }}>✕</button>
+                                        <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleAssignAuctionWinner(a.id)}>Save</button>
+                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => { setAssigningWinnerFor(null); setAssignWinnerMemberId(''); }}>✕</button>
                                       </div>
                                     ) : (
                                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <em style={{ color: 'var(--text-muted)' }}>N/A (No Winner)</em>
-                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '2px 8px', fontSize: '10px' }} onClick={() => { setAssigningWinnerFor(a.id); setAssignWinnerMemberId(''); }}>Assign</button>
+                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '2px 8px', fontSize: '12px' }} onClick={() => { setAssigningWinnerFor(a.id); setAssignWinnerMemberId(''); }}>Assign</button>
                                       </span>
                                     )}
                                   </td>
@@ -4404,8 +4454,8 @@ export default function LendApp() {
                                   {user.role === 'admin' && (
                                     <td>
                                       <div style={{ display: 'flex', gap: '6px' }}>
-                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => openEditRound(a)}><Pencil className="icon" style={{ width: '12px', height: '12px' }} /> Edit</button>
-                                        {isLatestRound(a) && <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => handleUndoRound(a)}><Undo2 className="icon" style={{ width: '12px', height: '12px' }} /> Undo</button>}
+                                        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => openEditRound(a)}><Pencil className="icon" style={{ width: '12px', height: '12px' }} /> Edit</button>
+                                        {isLatestRound(a) && <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => handleUndoRound(a)}><Undo2 className="icon" style={{ width: '12px', height: '12px' }} /> Undo</button>}
                                       </div>
                                     </td>
                                   )}
@@ -4437,13 +4487,13 @@ export default function LendApp() {
                                         <option key={m.id} value={m.id}>{m.name}</option>
                                       ))}
                                     </select>
-                                    <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '4px 8px', fontSize: '11px' }} onClick={() => handleAssignAuctionWinner(a.id)}>Save</button>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '11px' }} onClick={() => { setAssigningWinnerFor(null); setAssignWinnerMemberId(''); }}>✕</button>
+                                    <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleAssignAuctionWinner(a.id)}>Save</button>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => { setAssigningWinnerFor(null); setAssignWinnerMemberId(''); }}>✕</button>
                                   </span>
                                 ) : (
                                   <span className="mobile-row-card-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <em style={{ color: 'var(--text-muted)' }}>N/A</em>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '2px 8px', fontSize: '10px' }} onClick={() => { setAssigningWinnerFor(a.id); setAssignWinnerMemberId(''); }}>Assign</button>
+                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '2px 8px', fontSize: '12px' }} onClick={() => { setAssigningWinnerFor(a.id); setAssignWinnerMemberId(''); }}>Assign</button>
                                   </span>
                                 )}
 
@@ -4496,7 +4546,7 @@ export default function LendApp() {
                     <div>
                       <label htmlFor="et-code" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Short Code</label>
                       <input id="et-code" type="text" maxLength={12} autoCapitalize="characters" className="glass-input" placeholder="e.g. SMC-1" value={editTicketForm.code} onChange={e => setEditTicketForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} />
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Tells groups apart wherever they are listed. Must be different for every group.</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Tells groups apart wherever they are listed. Must be different for every group.</span>
                     </div>
                     <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                       <div>
@@ -4508,7 +4558,7 @@ export default function LendApp() {
                         <input id="et-members" required type="number" inputMode="numeric" min={Math.max(1, editTicketForm.roundsRun, editTicketForm.rosterCount || 0)} className="glass-input" value={editTicketForm.member_count} onChange={e => setEditTicketForm(p => ({ ...p, member_count: e.target.value }))} />
                       </div>
                     </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '-6px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '-6px' }}>
                       The member count is also the number of rounds. It can't go below the rounds already run ({editTicketForm.roundsRun}){editTicketForm.rosterCount !== null ? ` or the members on the roster (${editTicketForm.rosterCount})` : ' or the members already on the roster'}.
                     </span>
                     <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
@@ -4550,6 +4600,20 @@ export default function LendApp() {
                     {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
                     <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Changes'}</button>
                   </form>
+                  {user.role === 'admin' && (
+                    <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--accent-rose)', marginBottom: '6px' }}>Danger zone</div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 10px' }}>Deleting a group removes all its members, rounds and payment records. It can't be undone, and money collected must be reversed first.</p>
+                      <button
+                        type="button"
+                        className="glass-btn glass-btn-rose"
+                        style={{ width: '100%', padding: '12px' }}
+                        onClick={(e) => { const g = { id: editTicketForm.id, name: editTicketForm.name }; const leave = selectedTicketIdState === g.id; setEditTicketForm(null); handleDeleteTicket(g, e, { leaveDetail: leave }); }}
+                      >
+                        <Trash2 className="icon" /> Delete this group
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -4621,7 +4685,7 @@ export default function LendApp() {
                           <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
                       </select>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Members who already won another round aren't listed. The bid and the amounts for this round don't change — to fix a wrong bid, undo the latest round and run it again.</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Members who already won another round aren't listed. The bid and the amounts for this round don't change — to fix a wrong bid, undo the latest round and run it again.</span>
                     </div>
                     {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
                     <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px' }}>{loading ? 'Saving…' : 'Save Round'}</button>
@@ -8408,25 +8472,41 @@ export default function LendApp() {
       )}
 
       {/* Chit fund bottom bar: only chit actions (the loan bar below is for the loan portal).
-          Collect and New Group open over the groups list, so from inside a group they
-          take you back to the list first. */}
+          On the groups list it offers Groups / Collect / New Group / Portals; inside a group it
+          switches that group's sections. Collect and New Group open over the groups list, so
+          from inside a group they take you back to the list first. */}
       {token && user && view === 'ticket-dashboard' && (
-        <nav className="bottom-nav-bar animate-fade-in" aria-label="Chit fund">
+        <nav className="bottom-nav-bar animate-fade-in" aria-label={selectedTicket ? 'Group sections' : 'Chit fund'}>
           {(() => {
             const toList = () => { setSelectedTicketIdState(null); setSelectedTicket(null); fetchTickets(); };
-            const onList = !selectedTicket;
+            const tag = (active) => (active ? { 'aria-current': 'page' } : {});
+            if (selectedTicket) {
+              const sections = [
+                { tab: 'payments', label: 'Payments', Icon: CreditCard, active: activeTicketTab === 'payments' },
+                { tab: 'auction', label: 'Auction', Icon: TrendingUp, active: activeTicketTab === 'auction' },
+                { tab: 'members', label: 'Members', Icon: Users, active: activeTicketTab === 'members' || activeTicketTab === 'details' },
+                { tab: 'history', label: 'History', Icon: ScrollText, active: activeTicketTab === 'history' }
+              ];
+              return sections.map((x) => (
+                <button key={x.tab} className={`bottom-nav-item ${x.active ? 'active' : ''}`} {...tag(x.active)} onClick={() => { setActiveTicketTab(x.tab); window.scrollTo(0, 0); }}>
+                  <span className="bottom-nav-icon"><x.Icon /></span>
+                  <span className="bottom-nav-label">{x.label}</span>
+                </button>
+              ));
+            }
+            const onGroups = !showCollectCenter && !showCreateTicket;
             return (
               <>
-                <button className={`bottom-nav-item ${onList && !showCollectCenter && !showCreateTicket ? 'active' : ''}`} onClick={() => { setShowCollectCenter(false); setShowCreateTicket(false); toList(); }}>
+                <button className={`bottom-nav-item ${onGroups ? 'active' : ''}`} {...tag(onGroups)} onClick={() => { setShowCollectCenter(false); setShowCreateTicket(false); toList(); }}>
                   <span className="bottom-nav-icon"><PiggyBank /></span>
                   <span className="bottom-nav-label">Groups</span>
                 </button>
-                <button className={`bottom-nav-item ${showCollectCenter ? 'active' : ''}`} onClick={() => { setShowCreateTicket(false); toList(); setShowCollectCenter(true); }}>
+                <button className={`bottom-nav-item ${showCollectCenter ? 'active' : ''}`} {...tag(showCollectCenter)} onClick={() => { setShowCreateTicket(false); toList(); setShowCollectCenter(true); }}>
                   <span className="bottom-nav-icon"><CreditCard /></span>
                   <span className="bottom-nav-label">Collect</span>
                 </button>
                 {user.role === 'admin' && (
-                  <button className={`bottom-nav-item ${showCreateTicket ? 'active' : ''}`} onClick={() => { setShowCollectCenter(false); toList(); setTicketDialogError(''); setShowCreateTicket(true); }}>
+                  <button className={`bottom-nav-item ${showCreateTicket ? 'active' : ''}`} {...tag(showCreateTicket)} onClick={() => { setShowCollectCenter(false); toList(); setTicketDialogError(''); setShowCreateTicket(true); }}>
                     <span className="bottom-nav-icon"><Plus /></span>
                     <span className="bottom-nav-label">New Group</span>
                   </button>

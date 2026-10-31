@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/apiClient.js';
 import { Phone, Search, IdCard, X } from 'lucide-react';
 
-const labelStyle = { fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.04em' };
+const labelStyle = { fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.04em' };
 
 function CallLink({ phone }) {
   const dial = (phone || '').replace(/[^0-9+]/g, '');
@@ -97,7 +97,7 @@ function MemberCard({ ticketId, member, isAdmin, onEdit, onOpenPhoto }) {
     return (
       <div ref={cardRef} className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {header}
-        <div><span className="badge badge-pending" style={{ fontSize: '10px' }}>No details yet</span></div>
+        <div><span className="badge badge-pending" style={{ fontSize: '12px' }}>No details yet</span></div>
         {g && <GuarantorLine g={g} />}
       </div>
     );
@@ -146,7 +146,7 @@ function MemberCard({ ticketId, member, isAdmin, onEdit, onOpenPhoto }) {
             ))}
           </div>
         )}
-        {needsPhotos && full && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>Tap a photo to see it full size.</div>}
+        {needsPhotos && full && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Tap a photo to see it full size.</div>}
       </div>
 
       <GuarantorLine g={g} />

@@ -19,7 +19,7 @@ export default function ChitInstalmentBox({ payment, onCollect, onUndo, busy, fu
   // Fully paid: nothing more to collect, only a way to take it back.
   if (payment.is_paid) {
     return onUndo && payment.id ? (
-      <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '10px 14px', fontSize: '13px', width: '100%' } : { padding: '5px 10px', fontSize: '11px', marginTop: '6px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
+      <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '10px 14px', fontSize: '13px', width: '100%' } : { padding: '5px 10px', fontSize: '12px', marginTop: '6px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
         Undo payment
       </button>
     ) : null;
@@ -49,11 +49,11 @@ export default function ChitInstalmentBox({ payment, onCollect, onUndo, busy, fu
         value={value}
         onChange={e => setValue(e.target.value)}
       />
-      <button type="submit" className="glass-btn glass-btn-emerald" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '11px' }} disabled={busy || (value === '' && !(balance > 0))}>
+      <button type="submit" className="glass-btn glass-btn-emerald" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy || (value === '' && !(balance > 0))}>
         {busy ? 'Saving…' : takesBalance ? 'Collect balance' : 'Collect'}
       </button>
       {onUndo && collected > 0 && payment.id && (
-        <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '11px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
+        <button type="button" className="glass-btn glass-btn-secondary" style={fullWidth ? { padding: '10px 14px', fontSize: '13px' } : { padding: '5px 10px', fontSize: '12px' }} disabled={busy} onClick={() => onUndo(payment)} title="Take back everything collected from this member for this round">
           Undo
         </button>
       )}
