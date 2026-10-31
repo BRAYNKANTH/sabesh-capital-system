@@ -19,8 +19,10 @@ export async function GET(request) {
       return NextResponse.json({ message: 'Forbidden. You do not have access to the Ticket system.' }, { status: 403 });
     }
 
-    const tickets = await db('tickets').select('id', 'name', 'status', 'current_round', 'member_count');
+    // select('*'): the short code column may not exist until the codes migration has been run.
+    const tickets = await db('tickets').select('*');
     const groupName = new Map(tickets.map((t) => [t.id, t.name]));
+    const groupCode = new Map(tickets.map((t) => [t.id, t.code || null]));
     // The round whose auction was run most recently: current_round - 1, or the
     // last round once the group has completed.
     const latest = tickets
@@ -42,7 +44,7 @@ export async function GET(request) {
         'ticket_auctions.amount_per_member as amount_due', 'collectors.name as collected_by_name'
       );
 
-    return NextResponse.json(groupByCustomer(rows.map((r) => ({ ...r, group_name: groupName.get(r.ticket_id) || '' }))));
+    return NextResponse.json(groupByCustomer(rows.map((r) => ({ ...r, group_name: groupName.get(r.ticket_id) || '', group_code: groupCode.get(r.ticket_id) || null }))));
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
     logError('Chit collection list error', error, { method: request.method, url: request.url });

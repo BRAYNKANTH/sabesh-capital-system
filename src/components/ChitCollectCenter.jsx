@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { api } from '@/lib/apiClient.js';
 import ChitInstalmentBox from './ChitInstalmentBox.jsx';
+import ChitGroupChip from './ChitGroupChip.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dial = (phone) => (phone || '').replace(/[^0-9+]/g, '');
@@ -153,7 +154,11 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
             {c.chits.map(x => (
               <div key={x.payment_id} style={{ borderTop: '1px solid var(--border-light)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ overflowWrap: 'anywhere' }}><strong>{x.group_name}</strong> <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Round {x.round_number}</span></span>
+                  <span style={{ overflowWrap: 'anywhere', display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <ChitGroupChip code={x.group_code} />
+                    <strong>{x.group_name}</strong>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Round {x.round_number}</span>
+                  </span>
                   <span style={{ fontSize: '12px', fontWeight: '700', color: x.is_paid ? 'var(--accent-emerald)' : x.amount_paid ? 'var(--accent-gold)' : 'var(--text-secondary)' }}>
                     {x.is_paid ? 'Paid' : x.amount_paid ? 'Partial' : 'Pending'}
                   </span>

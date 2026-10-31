@@ -9,6 +9,8 @@ import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './Ch
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
 import ChitPaymentsTable from './ChitPaymentsTable.jsx';
+import ChitGroupChip from './ChitGroupChip.jsx';
+import { suggestCode } from '@/lib/services/chitCode.js';
 import ChitCollectCenter from './ChitCollectCenter.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
 import {
@@ -332,7 +334,7 @@ export default function LendApp() {
   const [activeTicketTab, setActiveTicketTab] = useState('auction'); // 'auction', 'members', 'details', 'payments', 'history'
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [showCollectCenter, setShowCollectCenter] = useState(false); // combined "Collect chit payments" screen
-  const [newTicketForm, setNewTicketForm] = useState({ name: '', total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
+  const [newTicketForm, setNewTicketForm] = useState({ name: '', code: '', codeEdited: false, total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
   const [newMemberForm, setNewMemberForm] = useState({ name: '', phone: '' });
   const [newMemberDetails, setNewMemberDetails] = useState(EMPTY_MEMBER_DETAILS);
   const [newMemberGuarantor, setNewMemberGuarantor] = useState(null); // null = no guarantor, else { nic_number, phone }
@@ -1545,6 +1547,7 @@ export default function LendApp() {
     try {
       await api.post('/tickets', {
         name: newTicketForm.name,
+        code: newTicketForm.code.trim() || undefined,
         total_value: parseFloat(newTicketForm.total_value),
         member_count: parseInt(newTicketForm.member_count, 10),
         start_date: newTicketForm.start_date,
@@ -1554,10 +1557,10 @@ export default function LendApp() {
       });
       showToast(`Ticket group '${newTicketForm.name}' created successfully.`);
       setShowCreateTicket(false);
-      setNewTicketForm({ name: '', total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
+      setNewTicketForm({ name: '', code: '', codeEdited: false, total_value: '', member_count: '', start_date: '', host_fee_type: 'percentage', host_fee_value: '', starting_round: '' });
       fetchTickets();
     } catch (err) {
-      setError(err.message);
+      setTicketDialogError(err.message);
     } finally {
       setLoading(false);
     }
@@ -1591,6 +1594,7 @@ export default function LendApp() {
     setEditTicketForm({
       id: ticket.id,
       name: ticket.name || '',
+      code: ticket.code || '',
       total_value: String(parseFloat(ticket.total_value)),
       member_count: String(ticket.member_count),
       start_date: toDateInputValue(ticket.start_date),
@@ -1611,6 +1615,7 @@ export default function LendApp() {
     try {
       const updated = await api.patch(`/tickets/${f.id}`, {
         name: f.name,
+        code: f.code.trim() || undefined,
         total_value: parseFloat(f.total_value),
         member_count: parseInt(f.member_count, 10),
         start_date: f.start_date || undefined,
@@ -3730,7 +3735,7 @@ export default function LendApp() {
                       <CreditCard style={{ width: '16px', height: '16px' }} /> Collect Payments
                     </button>
                     {user.role === 'admin' && (
-                      <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCreateTicket(true)}>
+                      <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => { setTicketDialogError(''); setShowCreateTicket(true); }}>
                         <Plus style={{ width: '16px', height: '16px' }} /> Create New Group
                       </button>
                     )}
@@ -3756,7 +3761,12 @@ export default function LendApp() {
                       <form onSubmit={handleCreateTicket} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                         <div>
                           <label htmlFor="f-ticket-group-name-3211" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Ticket Group Name *</label>
-                          <input id="f-ticket-group-name-3211" required type="text" className="glass-input" placeholder="e.g. name of group" value={newTicketForm.name} onChange={e => setNewTicketForm(prev => ({ ...prev, name: e.target.value }))} />
+                          <input id="f-ticket-group-name-3211" required type="text" className="glass-input" placeholder="e.g. name of group" value={newTicketForm.name} onChange={e => { const name = e.target.value; setNewTicketForm(prev => ({ ...prev, name, ...(prev.codeEdited ? {} : { code: name.trim() ? suggestCode(name, ticketsList.map(t => t.code)) : '' }) })); }} />
+                        </div>
+                        <div>
+                          <label htmlFor="f-ticket-group-code" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Short Code *</label>
+                          <input id="f-ticket-group-code" required type="text" maxLength={12} autoCapitalize="characters" className="glass-input" placeholder="e.g. SMC-1" value={newTicketForm.code} onChange={e => setNewTicketForm(prev => ({ ...prev, code: e.target.value.toUpperCase(), codeEdited: true }))} />
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>A short label that tells groups apart wherever they are listed, even when names are alike. It must be different for every group and can be changed later.</span>
                         </div>
                         <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                           <div>
@@ -3829,6 +3839,7 @@ export default function LendApp() {
                           </div>
                         )}
 
+                        {ticketDialogError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{ticketDialogError}</div>}
                         <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ width: '100%', padding: '12px', marginTop: '10px' }}>
                           Create Ticket Group
                         </button>
@@ -3875,7 +3886,10 @@ export default function LendApp() {
                             <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
                           </button>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '88px' }}>
-                            <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>{t.name}</h3>
+                            <div style={{ minWidth: 0 }}>
+                              {t.code && <div style={{ marginBottom: '4px' }}><ChitGroupChip code={t.code} /></div>}
+                              <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>{t.name}</h3>
+                            </div>
                             <span className={`status-pill ${t.status === 'active' ? 'status-pill-active' : 'status-pill-paid'}`}>
                               <span className="status-pill-dot" />{t.status === 'active' ? 'Active' : 'Completed'}
                             </span>
@@ -3935,6 +3949,7 @@ export default function LendApp() {
                 </div>
 
                 <div className="glass-card" style={{ padding: '24px' }}>
+                  {selectedTicket.code && <div style={{ marginBottom: '6px' }}><ChitGroupChip code={selectedTicket.code} /></div>}
                   <h2 style={{ fontSize: '26px', margin: '0 0 6px 0' }}>{selectedTicket.name}</h2>
                   <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     <span>Members: <strong>{ticketMembers.length} / {selectedTicket.member_count}</strong></span>
@@ -4476,6 +4491,11 @@ export default function LendApp() {
                     <div>
                       <label htmlFor="et-name" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Group Name *</label>
                       <input id="et-name" required type="text" maxLength={100} className="glass-input" value={editTicketForm.name} onChange={e => setEditTicketForm(p => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label htmlFor="et-code" style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Short Code</label>
+                      <input id="et-code" type="text" maxLength={12} autoCapitalize="characters" className="glass-input" placeholder="e.g. SMC-1" value={editTicketForm.code} onChange={e => setEditTicketForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} />
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Tells groups apart wherever they are listed. Must be different for every group.</span>
                     </div>
                     <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                       <div>

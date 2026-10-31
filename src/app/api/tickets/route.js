@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
+import { codeForNewGroup, isCodeTaken } from '@/lib/services/chitGroupCode.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request) {
@@ -26,7 +27,7 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Forbidden. You do not have access to the Ticket system.' }, { status: 403 });
     }
 
-    const { name, total_value, member_count, start_date, host_fee_type, host_fee_value, starting_round } = await request.json();
+    const { name, code: typedCode, total_value, member_count, start_date, host_fee_type, host_fee_value, starting_round } = await request.json();
 
     if (!name || !total_value || !member_count || !start_date || !host_fee_type || host_fee_value === undefined) {
       return NextResponse.json({ message: 'Missing required fields.' }, { status: 400 });
@@ -48,8 +49,14 @@ export async function POST(request) {
       }
     }
 
+    const groupCode = await codeForNewGroup(name, typedCode);
+    if (groupCode.error) {
+      return NextResponse.json({ message: groupCode.error }, { status: 400 });
+    }
+
     const [ticket] = await db('tickets').insert({
       name: name.trim(),
+      ...(groupCode.code ? { code: groupCode.code } : {}),
       total_value: parseFloat(total_value),
       member_count: memberCountInt,
       start_date,
@@ -62,12 +69,13 @@ export async function POST(request) {
     await db('audit_logs').insert({
       actor_id: user.id,
       action_type: 'TICKET_CREATE',
-      description: `Created ticket group '${name}' with total value ${total_value} LKR.`
+      description: `Created ticket group '${name}'${ticket.code ? ` [${ticket.code}]` : ''} with total value ${total_value} LKR.`
     });
 
     return NextResponse.json(ticket, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
+    if (isCodeTaken(error)) return NextResponse.json({ message: 'That code was just taken by another group. Choose a different code.' }, { status: 409 });
     logError('Create ticket error', error, { method: request.method, url: request.url });
     return NextResponse.json({ message: 'Failed to create ticket.' }, { status: 500 });
   }

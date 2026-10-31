@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
+import { codeForExistingGroup, isCodeTaken } from '@/lib/services/chitGroupCode.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request, { params }) {
@@ -118,6 +119,12 @@ export async function PATCH(request, { params }) {
       if (name !== ticket.name) { updates.name = name; changes.push(`name '${ticket.name}' -> '${name}'`); }
     }
 
+    if (body.code !== undefined) {
+      const checked = await codeForExistingGroup(body.code, id);
+      if (checked.error) return bad(checked.error);
+      if (checked.code !== ticket.code) { updates.code = checked.code; changes.push(`code ${ticket.code || 'none'} -> ${checked.code}`); }
+    }
+
     if (body.total_value !== undefined) {
       const total = parseFloat(body.total_value);
       if (isNaN(total) || total <= 0) return bad('Total value must be a positive number.');
@@ -195,6 +202,7 @@ export async function PATCH(request, { params }) {
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
+    if (isCodeTaken(error)) return NextResponse.json({ message: 'That code was just taken by another group. Choose a different code.' }, { status: 409 });
     logError('Update ticket error', error, { method: request.method, url: request.url });
     return NextResponse.json({ message: 'Failed to update ticket group.' }, { status: 500 });
   }

@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') });
 
 const { default: db } = await import('../src/lib/db.js');
+const { suggestCode } = await import('../src/lib/services/chitCode.js');
 const { default: bcrypt } = await import('bcryptjs');
 
 // Pre-hashed 'password123'
@@ -646,6 +647,26 @@ async function runIncrementalMigrations() {
   // Money taken before a round's auction was run is not "paid" until the auction
   // fixes the amount due; running the auction re-checks it.
   await db.raw('UPDATE ticket_payments SET is_paid = false WHERE auction_id IS NULL AND is_paid = true');
+
+  // Chit group codes: a short, unique, editable label (SMC, SMC-2 ...) that tells
+  // groups apart when their names are alike. Existing groups get one made from
+  // their name; the unique index ignores case.
+  await addColumnIfMissing('tickets', 'code', (t) => t.string('code', 12).nullable());
+  const uncoded = await db('tickets').whereNull('code').orderBy('created_at').orderBy('id').select('id', 'name');
+  if (uncoded.length > 0) {
+    const taken = (await db('tickets').whereNotNull('code').select('code')).map((r) => r.code);
+    for (const t of uncoded) {
+      const code = suggestCode(t.name, taken);
+      taken.push(code);
+      await db('tickets').where({ id: t.id }).update({ code });
+    }
+    console.log(`Migration: gave ${uncoded.length} chit group(s) a code.`);
+  }
+  try {
+    await db.raw('CREATE UNIQUE INDEX IF NOT EXISTS tickets_code_unique ON tickets (lower(code))');
+  } catch (err) {
+    console.warn(`Migration: could not make group codes unique (${err.message}).`);
+  }
 
   // The pawn portal's own double-entry ledger (accounts: pawn_cash,
   // pawn_receivable_principal, pawn_receivable_interest, pawn_interest_revenue,

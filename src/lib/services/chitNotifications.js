@@ -10,6 +10,17 @@ async function getOrgName() {
   }
 }
 
+// The group's short code, when it has one (the codes migration may not have been run yet).
+async function groupCodes(ticketIds) {
+  try {
+    const rows = await db('tickets').whereIn('id', ticketIds).select('id', 'code');
+    return new Map(rows.map((r) => [r.id, r.code]));
+  } catch {
+    return new Map();
+  }
+}
+const groupLabel = (name, code) => (code ? `${name} [${code}]` : name);
+
 const money = (n) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (d) => new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Colombo' });
 
@@ -36,6 +47,7 @@ export async function notifyChitPaymentReceived(paymentId, { received, balance }
   const [{ count: paidCount }] = await db('ticket_payments').where({ ticket_id: payment.ticket_id, member_id: payment.member_id, is_paid: true }).count('id as count');
   const [{ count: roundsRun }] = await db('ticket_auctions').where({ ticket_id: payment.ticket_id }).count('id as count');
   const org = await getOrgName();
+  const groupText = groupLabel(payment.group_name, (await groupCodes([payment.ticket_id])).get(payment.ticket_id));
 
   const nextRound = payment.next_round_date ? ` Next round: ${dateText(payment.next_round_date)}.` : '';
   const when = dateText(payment.payment_date || new Date());
@@ -44,10 +56,10 @@ export async function notifyChitPaymentReceived(paymentId, { received, balance }
   // or "rounds paid" figure to quote.
   const beforeAuction = payment.amount_per_member === null || payment.amount_per_member === undefined;
   const message = balance > 0
-    ? `Dear ${payment.member_name}, we received ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Balance still to pay: ${money(balance)}. Thank you! ${org}`
+    ? `Dear ${payment.member_name}, we received ${got} for ${groupText} (Round ${payment.round_number}) on ${when}. Balance still to pay: ${money(balance)}. Thank you! ${org}`
     : beforeAuction
-    ? `Dear ${payment.member_name}, we received ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Thank you! ${org}`
-    : `Dear ${payment.member_name}, we received your payment of ${got} for ${payment.group_name} (Round ${payment.round_number}) on ${when}. Thank you! Rounds paid so far: ${paidCount} of ${roundsRun}.${nextRound} ${org}`;
+    ? `Dear ${payment.member_name}, we received ${got} for ${groupText} (Round ${payment.round_number}) on ${when}. Thank you! ${org}`
+    : `Dear ${payment.member_name}, we received your payment of ${got} for ${groupText} (Round ${payment.round_number}) on ${when}. Thank you! Rounds paid so far: ${paidCount} of ${roundsRun}.${nextRound} ${org}`;
 
   const result = await sendNotification({ recipientName: payment.member_name, phone: payment.member_phone, message, role: 'chit member' });
   // success = the SMS provider accepted it; mocked = Text.lk isn't configured, so nothing left the server.
@@ -63,16 +75,17 @@ export async function notifyChitCombinedPaymentReceived(paymentIds, received = {
     .join('ticket_members', 'ticket_payments.member_id', 'ticket_members.id')
     .join('tickets', 'ticket_payments.ticket_id', 'tickets.id')
     .whereIn('ticket_payments.id', paymentIds)
-    .select('ticket_payments.id', 'ticket_payments.round_number', 'ticket_payments.amount', 'ticket_payments.payment_date',
+    .select('ticket_payments.id', 'ticket_payments.ticket_id', 'ticket_payments.round_number', 'ticket_payments.amount', 'ticket_payments.payment_date',
       'ticket_members.name as member_name', 'ticket_members.phone as member_phone', 'tickets.name as group_name')
     .orderBy('tickets.name', 'asc');
   const phone = rows.map((r) => r.member_phone).find(Boolean);
   if (!rows.length || !phone) return { sent: false, reason: 'no_phone' };
 
   const org = await getOrgName();
+  const codes = await groupCodes([...new Set(rows.map((r) => r.ticket_id))]);
   const got = (r) => parseFloat(received[r.id] ?? r.amount) || 0;
   const total = rows.reduce((s, r) => s + got(r), 0);
-  const parts = rows.map((r) => `${money(got(r))} for ${r.group_name} (Round ${r.round_number})`).join(', ');
+  const parts = rows.map((r) => `${money(got(r))} for ${groupLabel(r.group_name, codes.get(r.ticket_id))} (Round ${r.round_number})`).join(', ');
   const message = `Dear ${rows[0].member_name}, we received your payments on ${dateText(rows[0].payment_date || new Date())}: ${parts}. Total ${money(total)}. Thank you! ${org}`;
 
   const result = await sendNotification({ recipientName: rows[0].member_name, phone, message, role: 'chit member' });

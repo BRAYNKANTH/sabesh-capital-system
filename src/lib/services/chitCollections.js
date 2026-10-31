@@ -8,7 +8,7 @@ import { balanceDue, round2 } from './chitPayments.js';
 // matched, so they stay on their own.
 //
 // Row shape: payment_id, member_id, member_name, member_phone, ticket_id,
-// group_name, round_number, amount_due, amount, is_paid, payment_date,
+// group_name, group_code, round_number, amount_due, amount, is_paid, payment_date,
 // collected_by_name.
 export function groupByCustomer(rows) {
   const customers = new Map();
@@ -24,6 +24,7 @@ export function groupByCustomer(rows) {
       member_id: row.member_id,
       ticket_id: row.ticket_id,
       group_name: row.group_name,
+      group_code: row.group_code || null,
       round_number: row.round_number,
       amount_due: round2(row.amount_due),
       is_paid: !!row.is_paid,

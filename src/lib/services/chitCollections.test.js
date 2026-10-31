@@ -19,6 +19,17 @@ describe('groupByCustomer', () => {
     expect(totals).toEqual({ pending: 8650, pending_customers: 1 });
   });
 
+  it('keeps each line\'s group code so same-named groups can be told apart', () => {
+    const { customers } = groupByCustomer([
+      row({ payment_id: 'a', member_id: 'm1', ticket_id: 't1', group_name: 'Sabesh micro credit', group_code: 'SMC' }),
+      row({ payment_id: 'b', member_id: 'm2', ticket_id: 't2', group_name: 'Sabesh micro credit', group_code: 'SMC-2' }),
+      row({ payment_id: 'c', member_id: 'm3', ticket_id: 't3', group_name: 'Old group' })
+    ]);
+    const codes = customers[0].chits.map((c) => c.group_code);
+    expect(codes).toHaveLength(3);
+    expect(codes).toEqual(expect.arrayContaining(['SMC', 'SMC-2', null]));
+  });
+
   it('counts only what is still owed, so a part payment leaves a balance', () => {
     const { customers } = groupByCustomer([row({ amount: '4000.00', amount_due: '6750.00' })]);
     expect(customers[0].chits[0].amount_paid).toBe(4000);
