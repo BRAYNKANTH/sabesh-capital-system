@@ -3720,7 +3720,7 @@ export default function LendApp() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     {canSwitchPortals(user) && (
-                      <button className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px' }} onClick={() => setView('portal')}>
+                      <button className="glass-btn glass-btn-secondary mobile-hidden" style={{ padding: '8px 14px' }} onClick={() => setView('portal')}>
                         <ArrowLeft className="icon" /> Main Selector
                       </button>
                     )}
@@ -3729,7 +3729,8 @@ export default function LendApp() {
                       <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Host-focused Chit Fund Management</span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* On phones these two actions live in the bottom bar (Collect, New Group). */}
+                  <div className="mobile-hidden" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     {/* Quick way to collect: everyone who owes money across all groups, one card per person. */}
                     <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCollectCenter(true)}>
                       <CreditCard style={{ width: '16px', height: '16px' }} /> Collect Payments
@@ -8406,8 +8407,44 @@ export default function LendApp() {
         </div>
       )}
 
-      {/* Sticky Bottom Navigation Bar */}
-      {token && user && view !== 'portal' && view !== 'pawn-dashboard' && (
+      {/* Chit fund bottom bar: only chit actions (the loan bar below is for the loan portal).
+          Collect and New Group open over the groups list, so from inside a group they
+          take you back to the list first. */}
+      {token && user && view === 'ticket-dashboard' && (
+        <nav className="bottom-nav-bar animate-fade-in" aria-label="Chit fund">
+          {(() => {
+            const toList = () => { setSelectedTicketIdState(null); setSelectedTicket(null); fetchTickets(); };
+            const onList = !selectedTicket;
+            return (
+              <>
+                <button className={`bottom-nav-item ${onList && !showCollectCenter && !showCreateTicket ? 'active' : ''}`} onClick={() => { setShowCollectCenter(false); setShowCreateTicket(false); toList(); }}>
+                  <span className="bottom-nav-icon"><PiggyBank /></span>
+                  <span className="bottom-nav-label">Groups</span>
+                </button>
+                <button className={`bottom-nav-item ${showCollectCenter ? 'active' : ''}`} onClick={() => { setShowCreateTicket(false); toList(); setShowCollectCenter(true); }}>
+                  <span className="bottom-nav-icon"><CreditCard /></span>
+                  <span className="bottom-nav-label">Collect</span>
+                </button>
+                {user.role === 'admin' && (
+                  <button className={`bottom-nav-item ${showCreateTicket ? 'active' : ''}`} onClick={() => { setShowCollectCenter(false); toList(); setTicketDialogError(''); setShowCreateTicket(true); }}>
+                    <span className="bottom-nav-icon"><Plus /></span>
+                    <span className="bottom-nav-label">New Group</span>
+                  </button>
+                )}
+                {canSwitchPortals(user) && (
+                  <button className="bottom-nav-item" onClick={() => { setShowCollectCenter(false); setShowCreateTicket(false); setView('portal'); }}>
+                    <span className="bottom-nav-icon"><LayoutGrid /></span>
+                    <span className="bottom-nav-label">Portals</span>
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </nav>
+      )}
+
+      {/* Sticky Bottom Navigation Bar (loan portal) */}
+      {token && user && view !== 'portal' && view !== 'pawn-dashboard' && view !== 'ticket-dashboard' && (
         <nav className="bottom-nav-bar animate-fade-in">
           {user.role === 'admin' && (
             <>
