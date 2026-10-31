@@ -1513,7 +1513,7 @@ export default function LendApp() {
       
       setTicketPaymentFilterRound(String(targetRound));
       
-      if (auctions.length > 0) {
+      if (auctions.length > 0 || (ticket.status !== 'completed' && targetRound === ticket.current_round)) {
         const payments = await api.get(`/tickets/${ticketId}/payments?round=${targetRound}`);
         setTicketPayments(payments);
       } else {
@@ -1859,17 +1859,32 @@ export default function LendApp() {
 
   // A member can pay a round in parts: the payment is "Partial" until what has
   // been collected reaches the amount due, then "Collected".
-  const paymentStatus = (p) => (p.is_paid ? 'Collected' : parseFloat(p.amount) > 0 ? 'Partial' : 'Pending');
+  // Before the round's auction is run there is no amount due, so money taken
+  // then shows as "Received" until the auction decides if it covers the due.
+  const paymentStatus = (p) => (p.is_paid ? 'Collected' : parseFloat(p.amount) > 0 ? (p.amount_due == null ? 'Received' : 'Partial') : 'Pending');
   const paymentStatusColor = (p) => (p.is_paid ? 'var(--accent-emerald)' : parseFloat(p.amount) > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)');
   const paymentBalance = (p) => (p.amount_due === null || p.amount_due === undefined ? null : Math.max(0, parseFloat(p.amount_due) - (parseFloat(p.amount) || 0)));
 
+  // One Payments Tracker for everything: the rounds already auctioned, plus the
+  // round still to be run. For that round there is no amount due yet, so every
+  // member is listed (with whatever has been collected so far) and money can be
+  // taken before the auction.
+  const pendingRound = selectedTicket && selectedTicket.status !== 'completed' ? selectedTicket.current_round : null;
+  const viewingPendingRound = pendingRound !== null && String(ticketPaymentFilterRound) === String(pendingRound);
+  const trackerRows = viewingPendingRound
+    ? ticketMembers.map(m => ticketPayments.find(p => p.member_id === m.id) || { id: null, member_id: m.id, member_name: m.name, member_phone: m.phone, round_number: pendingRound, amount: null, amount_due: null, is_paid: false })
+    : ticketPayments;
+
   // Collects an amount (part or all of what is owed) from one member's payment.
   // Resolves true when it was saved, so the amount box can clear itself.
-  const collectInstalment = async (paymentId, amount) => {
+  // `payment` is a tracker row; one that has no id yet (a member nothing has
+  // been collected from before the auction) is collected by member instead.
+  const collectInstalment = async (payment, amount) => {
     if (!selectedTicketIdState || payingId) return false;
-    setPayingId(paymentId);
+    const rowKey = payment.id || payment.member_id;
+    setPayingId(rowKey);
     try {
-      const res = await api.post(`/tickets/${selectedTicketIdState}/payments`, { payment_id: paymentId, amount });
+      const res = await api.post(`/tickets/${selectedTicketIdState}/payments`, payment.id ? { payment_id: payment.id, amount } : { member_id: payment.member_id, amount });
       const memberName = res.payment?.member_name || 'the member';
       const left = res.balance > 0 ? ` LKR ${Number(res.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} still to pay.` : ' Fully paid.';
       const sms = res.sms === 'sent' ? ' A thank-you SMS was sent.' : res.sms === 'no_phone' ? ' No phone number on file, so no SMS was sent.' : res.sms === 'failed' ? ' The SMS could not be sent (see More → SMS Log).' : res.sms === 'mocked' ? ' No SMS was sent because Text.lk is not set up.' : '';
@@ -3718,9 +3733,9 @@ export default function LendApp() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <button className="glass-btn glass-btn-secondary" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCollectCenter(true)}>
-                      <CreditCard style={{ width: '16px', height: '16px' }} /> Collect Payments
-                    </button>
+                    {/* Payments are collected in each group's Payments tab. The combined by-customer screen
+                        (ChitCollectCenter, below) is kept but has no button; add one that calls
+                        setShowCollectCenter(true) to bring it back. */}
                     {user.role === 'admin' && (
                       <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCreateTicket(true)}>
                         <Plus style={{ width: '16px', height: '16px' }} /> Create New Group
@@ -4286,31 +4301,30 @@ export default function LendApp() {
 
                 {activeTicketTab === 'payments' && (
                   <>
-                  <ChitCollectionsPanel
-                    ticket={selectedTicket}
-                    members={ticketMembers}
-                    isAdmin={user.role === 'admin'}
-                    refreshKey={collectionsRefresh}
-                    onChanged={() => handleFetchTicketPaymentsByRound(ticketPaymentFilterRound)}
-                    showToast={showToast}
-                  />
+                  <ChitCollectionsPanel ticket={selectedTicket} refreshKey={collectionsRefresh} />
                   <div className="glass-card animate-fade-in" style={{ padding: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                      <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}><CreditCard className="icon" /> Repayments Collection Tracker</h3>
-                      
-                      {/* Round filter selector */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '10px' }}>
+                      <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}><CreditCard className="icon" /> Collect Payments</h3>
+
+                      {/* Round selector */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>View Round:</span>
-                        <select className="glass-input" style={{ width: '110px', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
+                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Round:</span>
+                        <select className="glass-input" style={{ width: pendingRound ? '230px' : '110px', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
                           {Array.from({ length: selectedTicket.status === 'completed' ? selectedTicket.member_count : selectedTicket.current_round - 1 }, (_, i) => i + 1).map(r => (
                             <option key={r} value={r}>Round {r}</option>
                           ))}
+                          {pendingRound && <option value={pendingRound}>Round {pendingRound} (auction not run yet)</option>}
                         </select>
                       </div>
                     </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '0 0 16px' }}>
+                      {viewingPendingRound
+                        ? `Round ${pendingRound}'s auction hasn't been run, so there is no amount due yet. Enter what each member pays; when you run the auction these payments are attached to the round and any shortfall shows as a balance.`
+                        : 'Enter what a member paid and press Collect. They can pay in parts; the balance stays until it is paid.'}
+                    </p>
 
-                    {ticketPayments.length === 0 ? (
-                      <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>No payments logged yet. Settle an auction round to generate payment logs.</p>
+                    {trackerRows.length === 0 ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>{viewingPendingRound ? 'Add members to the group first.' : 'No payments logged yet. Settle an auction round to generate payment logs.'}</p>
                     ) : (
                       <>
                         <div className="desktop-only" style={{ overflowX: 'auto' }}>
@@ -4330,10 +4344,10 @@ export default function LendApp() {
                               </tr>
                             </thead>
                             <tbody>
-                              {ticketPayments.map(p => {
+                              {trackerRows.map(p => {
                                 const auction = ticketAuctions.find(a => a.round_number === p.round_number);
                                 return (
-                                  <tr key={p.id}>
+                                  <tr key={p.id || p.member_id}>
                                     <td>
                                       <strong>{p.member_name}</strong>
                                     </td>
@@ -4354,23 +4368,25 @@ export default function LendApp() {
                                         <span style={{ color: 'var(--text-muted)' }}>—</span>
                                       )}
                                     </td>
-                                    <td style={{ fontWeight: 'bold' }}>LKR {auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</td>
+                                    <td style={{ fontWeight: 'bold' }}>{auction ? `LKR ${parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '12px' }}>Set when the auction is run</span>}</td>
                                     <td style={{ fontWeight: 'bold', color: parseFloat(p.amount) > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
                                       {parseFloat(p.amount) > 0 ? `LKR ${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                                     </td>
                                     <td style={{ fontWeight: 'bold', color: paymentBalance(p) > 0 ? 'var(--accent-rose)' : 'var(--text-muted)' }}>
-                                      {paymentBalance(p) === null ? 'N/A' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                                      {paymentBalance(p) === null ? '—' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                                     </td>
                                     <td>
                                       <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                        <input
-                                          type="checkbox"
-                                          checked={p.is_paid}
-                                          disabled={user.role !== 'admin' || payingId === p.id}
-                                          title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
-                                          onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                          style={{ width: '18px', height: '18px', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed', accentColor: 'var(--accent-emerald)' }}
-                                        />
+                                        {p.amount_due != null && (
+                                          <input
+                                            type="checkbox"
+                                            checked={p.is_paid}
+                                            disabled={user.role !== 'admin' || payingId === p.id}
+                                            title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
+                                            onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
+                                            style={{ width: '18px', height: '18px', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed', accentColor: 'var(--accent-emerald)' }}
+                                          />
+                                        )}
                                         <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
                                           {paymentStatus(p)}
                                         </span>
@@ -4382,11 +4398,11 @@ export default function LendApp() {
                                     </td>
                                     {user.role === 'admin' && (
                                       <td>
-                                        {p.is_paid ? '—' : <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />}
+                                        {p.is_paid ? '—' : <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />}
                                       </td>
                                     )}
                                     <td>
-                                      {p.member_phone && !p.is_paid ? (
+                                      {p.member_phone && !p.is_paid && p.amount_due != null ? (
                                         <button className="glass-btn btn-whatsapp" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
                                           const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
                                           const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
@@ -4412,14 +4428,14 @@ export default function LendApp() {
 
                         {/* Mobile Checklist */}
                         <div className="mobile-only" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          {ticketPayments.map(p => {
+                          {trackerRows.map(p => {
                             const auction = ticketAuctions.find(a => a.round_number === p.round_number);
                             return (
-                              <div key={p.id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '14px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div key={p.id || p.member_id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: '14px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                   <strong style={{ display: 'block', fontSize: '14px' }}>{p.member_name}</strong>
                                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                    Due: <strong>LKR {auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</strong>
+                                    Due: {auction ? <strong>LKR {parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> : <span style={{ color: 'var(--text-muted)' }}>set when the auction is run</span>}
                                   </div>
                                   {parseFloat(p.amount) > 0 && (
                                     <div style={{ fontSize: '12px', color: p.is_paid ? 'var(--accent-emerald)' : 'var(--accent-gold)', marginTop: '4px' }}>
@@ -4430,7 +4446,7 @@ export default function LendApp() {
                                     </div>
                                   )}
                                   {user.role === 'admin' && !p.is_paid && (
-                                    <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />
+                                    <ChitInstalmentBox payment={p} onCollect={collectInstalment} onUndo={(row) => handleToggleTicketPayment(row.id, false)} busy={payingId === (p.id || p.member_id)} />
                                   )}
                                   {p.member_phone && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
@@ -4448,19 +4464,21 @@ export default function LendApp() {
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={p.is_paid}
-                                      disabled={user.role !== 'admin' || payingId === p.id}
-                                      title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
-                                      onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
-                                      style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed' }}
-                                    />
+                                    {p.amount_due != null && (
+                                      <input
+                                        type="checkbox"
+                                        checked={p.is_paid}
+                                        disabled={user.role !== 'admin' || payingId === p.id}
+                                        title={user.role !== 'admin' ? 'Only an admin can change this' : undefined}
+                                        onChange={() => handleToggleTicketPayment(p.id, !p.is_paid)}
+                                        style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: user.role === 'admin' ? 'pointer' : 'not-allowed' }}
+                                      />
+                                    )}
                                     <span style={{ fontSize: '12px', fontWeight: 'bold', color: paymentStatusColor(p) }}>
                                       {paymentStatus(p)}
                                     </span>
                                   </label>
-                                  {p.member_phone && !p.is_paid && (
+                                  {p.member_phone && !p.is_paid && p.amount_due != null && (
                                     <button className="glass-btn btn-whatsapp" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => {
                                       const clean = (p.member_phone || '').replace(/[^0-9]/g, '');
                                       const int = clean.startsWith('0') ? '94' + clean.slice(1) : (clean.startsWith('94') ? clean : '94' + clean);
