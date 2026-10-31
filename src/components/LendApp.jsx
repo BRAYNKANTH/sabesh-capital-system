@@ -4320,9 +4320,12 @@ export default function LendApp() {
                                 <th>Member Name</th>
                                 <th>Contact</th>
                                 <th>Amount Due</th>
-                                <th>Collected?</th>
+                                <th>Paid</th>
+                                <th>Balance</th>
+                                <th>Status</th>
                                 <th>Date Paid</th>
                                 <th>Collected By</th>
+                                {user.role === 'admin' && <th>Collect Amount</th>}
                                 <th>Notify Reminder</th>
                               </tr>
                             </thead>
@@ -4352,6 +4355,12 @@ export default function LendApp() {
                                       )}
                                     </td>
                                     <td style={{ fontWeight: 'bold' }}>LKR {auction ? parseFloat(auction.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</td>
+                                    <td style={{ fontWeight: 'bold', color: parseFloat(p.amount) > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
+                                      {parseFloat(p.amount) > 0 ? `LKR ${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                                    </td>
+                                    <td style={{ fontWeight: 'bold', color: paymentBalance(p) > 0 ? 'var(--accent-rose)' : 'var(--text-muted)' }}>
+                                      {paymentBalance(p) === null ? 'N/A' : paymentBalance(p) > 0 ? `LKR ${paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                                    </td>
                                     <td>
                                       <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                         <input
@@ -4369,19 +4378,13 @@ export default function LendApp() {
                                     </td>
                                     <td>{p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'}</td>
                                     <td>
-                                      {parseFloat(p.amount) > 0 ? (
-                                        <>
-                                          <strong>LKR {parseFloat(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                                          {!p.is_paid && paymentBalance(p) !== null && (
-                                            <div style={{ fontSize: '11px', color: 'var(--accent-rose)', fontWeight: 'bold' }}>Balance LKR {paymentBalance(p).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                                          )}
-                                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.collected_by_name || 'collector not recorded'}</div>
-                                        </>
-                                      ) : '—'}
-                                      {user.role === 'admin' && !p.is_paid && (
-                                        <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />
-                                      )}
+                                      {parseFloat(p.amount) > 0 ? (p.collected_by_name || 'collector not recorded') : '—'}
                                     </td>
+                                    {user.role === 'admin' && (
+                                      <td>
+                                        {p.is_paid ? '—' : <ChitInstalmentBox payment={p} onCollect={collectInstalment} busy={payingId === p.id} />}
+                                      </td>
+                                    )}
                                     <td>
                                       {p.member_phone && !p.is_paid ? (
                                         <button className="glass-btn btn-whatsapp" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
