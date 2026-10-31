@@ -3725,9 +3725,10 @@ export default function LendApp() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {/* Payments are collected in each group's Payments tab. The combined by-customer screen
-                        (ChitCollectCenter, below) is kept but has no button; add one that calls
-                        setShowCollectCenter(true) to bring it back. */}
+                    {/* Quick way to collect: everyone who owes money across all groups, one card per person. */}
+                    <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCollectCenter(true)}>
+                      <CreditCard style={{ width: '16px', height: '16px' }} /> Collect Payments
+                    </button>
                     {user.role === 'admin' && (
                       <button className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowCreateTicket(true)}>
                         <Plus style={{ width: '16px', height: '16px' }} /> Create New Group
