@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
 import { codeForNewGroup, isCodeTaken } from '@/lib/services/chitGroupCode.js';
+import { OVERDUE_AFTER_DAYS } from '@/lib/services/chitOverdue.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request) {
@@ -12,7 +13,27 @@ export async function GET(request) {
     }
 
     const tickets = await db('tickets').orderBy('created_at', 'desc');
-    return NextResponse.json(tickets);
+
+    // How much is overdue in each group (unpaid or part-paid, more than the grace
+    // period after the round's auction). Only a convenience for the list: if it
+    // cannot be worked out the groups still load.
+    let overdue = [];
+    try {
+      overdue = await db('ticket_payments as p')
+        .join('ticket_auctions as a', 'p.auction_id', 'a.id')
+        .where('p.is_paid', false)
+        .whereRaw("a.auction_date + ?::int < (now() AT TIME ZONE 'Asia/Colombo')::date", [OVERDUE_AFTER_DAYS])
+        .groupBy('p.ticket_id')
+        .select('p.ticket_id', db.raw('COUNT(*)::int AS overdue_count'), db.raw('COALESCE(SUM(a.amount_per_member - COALESCE(p.amount, 0)), 0) AS overdue_amount'));
+    } catch (error) {
+      logError('Overdue summary error', error, { method: request.method, url: request.url });
+    }
+    const byGroup = new Map(overdue.map((r) => [r.ticket_id, r]));
+    return NextResponse.json(tickets.map((t) => ({
+      ...t,
+      overdue_count: byGroup.get(t.id)?.overdue_count || 0,
+      overdue_amount: parseFloat(byGroup.get(t.id)?.overdue_amount) || 0
+    })));
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
     logError('List tickets error', error, { method: request.method, url: request.url });

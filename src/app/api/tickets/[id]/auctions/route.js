@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
 import { settleRoundPayments } from '@/lib/services/chitPayments.js';
+import { resolveWinner } from '@/lib/services/chitWinner.js';
 import { logError } from '@/lib/logger.js';
 
 export async function GET(request, { params }) {
@@ -15,7 +16,12 @@ export async function GET(request, { params }) {
     const auctions = await db('ticket_auctions')
       .leftJoin('ticket_members', 'ticket_auctions.winner_member_id', 'ticket_members.id')
       .where('ticket_auctions.ticket_id', id)
-      .select('ticket_auctions.*', 'ticket_members.name as winner_name', 'ticket_members.phone as winner_phone')
+      .select(
+        'ticket_auctions.*', 'ticket_members.name as winner_name', 'ticket_members.phone as winner_phone',
+        // what has actually been collected for the round so far, so the host can see
+        // whether the pot is in hand before paying the winner
+        db.raw('(SELECT COALESCE(SUM(p.amount), 0) FROM ticket_payments p WHERE p.auction_id = ticket_auctions.id) AS collected_total')
+      )
       .orderBy('round_number', 'asc');
 
     return NextResponse.json(auctions);
@@ -49,14 +55,22 @@ export async function POST(request, { params }) {
       return NextResponse.json({ message: 'This ticket group has already completed all rounds.' }, { status: 400 });
     }
 
-    // Verify winner member exists and belongs to this group
-    let winner = null;
-    if (winner_member_id) {
-      winner = await db('ticket_members').where({ id: winner_member_id, ticket_id: id }).first();
-      if (!winner) {
-        return NextResponse.json({ message: 'Winner member not found in this ticket group.' }, { status: 400 });
-      }
+    // Who wins: someone on this roster who has not won before; on the final round
+    // the one member left is the winner by default.
+    const roster = await db('ticket_members').where({ ticket_id: id }).select('id', 'name');
+    const earlierWins = await db('ticket_auctions').where({ ticket_id: id }).whereNotNull('winner_member_id').select('winner_member_id', 'round_number');
+    const resolved = resolveWinner({
+      requestedId: winner_member_id,
+      members: roster,
+      wonByMember: new Map(earlierWins.map((r) => [r.winner_member_id, r.round_number])),
+      isFinalRound: ticket.current_round >= parseInt(ticket.member_count, 10),
+      memberCount: parseInt(ticket.member_count, 10)
+    });
+    if (resolved.error) {
+      return NextResponse.json({ message: resolved.error }, { status: 400 });
     }
+    const winnerId = resolved.winnerId;
+    const winner = winnerId ? roster.find((m) => m.id === winnerId) : null;
 
     const bidVal = parseFloat(bid_amount);
     const totalVal = parseFloat(ticket.total_value);
@@ -94,7 +108,7 @@ export async function POST(request, { params }) {
         round_number: ticket.current_round,
         auction_date,
         bid_amount: bidVal,
-        winner_member_id: winner_member_id || null,
+        winner_member_id: winnerId,
         winner_payout,
         base_payment,
         host_fee_per_member,
@@ -143,7 +157,7 @@ export async function POST(request, { params }) {
     await db('audit_logs').insert({
       actor_id: user.id,
       action_type: 'TICKET_AUCTION_RUN',
-      description: `Ran round ${ticket.current_round} for ticket '${ticket.name}'. Winner: ${winner ? winner.name : 'None'} (Payout: ${winner_payout} LKR).`
+      description: `Ran round ${ticket.current_round} for ticket '${ticket.name}'. Winner: ${winner ? winner.name : 'None'}${resolved.auto ? ' (the last remaining member)' : ''} (Payout: ${winner_payout} LKR).`
     });
 
     return NextResponse.json({ ...newAuction, winner_name: winner ? winner.name : null }, { status: 201 });

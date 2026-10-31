@@ -1,5 +1,6 @@
 import { normalizePhone } from '../phone.js';
 import { balanceDue, round2 } from './chitPayments.js';
+import { overdueDays, toDateString } from './chitOverdue.js';
 
 // Overall view by group: how much is still owed in each group and by how many
 // people, largest first. Takes the `customers` list produced by groupByCustomer.
@@ -29,7 +30,8 @@ export function groupTotals(customers) {
 // Row shape: payment_id, member_id, member_name, member_phone, ticket_id,
 // group_name, group_code, round_number, amount_due, amount, is_paid, payment_date,
 // collected_by_name.
-export function groupByCustomer(rows) {
+// `today` ('YYYY-MM-DD', Sri Lanka time) lets it mark lines that are past their due date.
+export function groupByCustomer(rows, { today } = {}) {
   const customers = new Map();
 
   for (const row of rows) {
@@ -44,6 +46,8 @@ export function groupByCustomer(rows) {
       ticket_id: row.ticket_id,
       group_name: row.group_name,
       group_code: row.group_code || null,
+      auction_date: toDateString(row.auction_date),
+      overdue_days: row.is_paid ? 0 : overdueDays(row.auction_date, today),
       round_number: row.round_number,
       amount_due: round2(row.amount_due),
       is_paid: !!row.is_paid,
@@ -58,20 +62,26 @@ export function groupByCustomer(rows) {
   const list = [...customers.values()].map((c) => {
     const chits = c.chits.sort((a, b) => a.group_name.localeCompare(b.group_name) || a.round_number - b.round_number);
     const pending = chits.filter((x) => !x.is_paid);
+    const late = pending.filter((x) => x.overdue_days > 0);
     return {
       ...c,
       chits,
       total_due: round2(chits.reduce((s, x) => s + x.amount_due, 0)),
       total_pending: round2(pending.reduce((s, x) => s + x.balance, 0)),
-      pending_count: pending.length
+      pending_count: pending.length,
+      overdue_count: late.length,
+      overdue_amount: round2(late.reduce((s, x) => s + x.balance, 0)),
+      max_overdue_days: late.reduce((m, x) => Math.max(m, x.overdue_days), 0)
     };
-  }).sort((a, b) => (b.pending_count > 0) - (a.pending_count > 0) || a.name.localeCompare(b.name));
+  }).sort((a, b) => (b.pending_count > 0) - (a.pending_count > 0) || (b.overdue_count > 0) - (a.overdue_count > 0) || a.name.localeCompare(b.name));
 
   return {
     customers: list,
     totals: {
       pending: round2(list.reduce((s, c) => s + c.total_pending, 0)),
-      pending_customers: list.filter((c) => c.pending_count > 0).length
+      pending_customers: list.filter((c) => c.pending_count > 0).length,
+      overdue: round2(list.reduce((s, c) => s + c.overdue_amount, 0)),
+      overdue_customers: list.filter((c) => c.overdue_count > 0).length
     }
   };
 }

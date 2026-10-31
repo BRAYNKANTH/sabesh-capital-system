@@ -36,6 +36,11 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ message: 'Auction round not found.' }, { status: 404 });
     }
 
+    // Once the winner has been paid, who won is part of that record.
+    if (hasWinner && auction.payout_paid_at) {
+      return NextResponse.json({ message: "This round's payout has already been paid to the winner, so the winner can't be changed. Undo the payout first." }, { status: 400 });
+    }
+
     const updates = {};
     const notes = [];
     let memberName = null;
@@ -117,6 +122,10 @@ export async function DELETE(request, { params }) {
     const latest = await db('ticket_auctions').where({ ticket_id: id }).max('round_number as max').first();
     if (auction.round_number !== latest.max) {
       return NextResponse.json({ message: `Only the latest round (round ${latest.max}) can be undone.` }, { status: 400 });
+    }
+
+    if (auction.payout_paid_at) {
+      return NextResponse.json({ message: `The payout for round ${auction.round_number} has been paid to the winner. Undo the payout first, then undo the round.` }, { status: 400 });
     }
 
     const [{ count: paidCount }] = await db('ticket_payments').where({ auction_id: auctionId }).andWhere('amount', '>', 0).count('id as count');

@@ -16,7 +16,7 @@ describe('groupByCustomer', () => {
     expect(customers[0].chits.map((c) => c.group_name)).toEqual(['Group A', 'Group B']);
     expect(customers[0].total_pending).toBe(8650);
     expect(customers[0].pending_count).toBe(2);
-    expect(totals).toEqual({ pending: 8650, pending_customers: 1 });
+    expect(totals).toMatchObject({ pending: 8650, pending_customers: 1, overdue: 0, overdue_customers: 0 });
   });
 
   it('keeps each line\'s group code so same-named groups can be told apart', () => {
@@ -54,7 +54,7 @@ describe('groupByCustomer', () => {
     expect(customers.map((c) => c.name)).toEqual(['Zzz', 'Aaa']);
     expect(customers[1].pending_count).toBe(0);
     expect(customers[1].total_pending).toBe(0);
-    expect(totals).toEqual({ pending: 1900, pending_customers: 1 });
+    expect(totals).toMatchObject({ pending: 1900, pending_customers: 1 });
   });
 
   it('cannot match members without a phone number, so each stays on their own', () => {
@@ -66,7 +66,7 @@ describe('groupByCustomer', () => {
   });
 
   it('returns nothing for no rows', () => {
-    expect(groupByCustomer([])).toEqual({ customers: [], totals: { pending: 0, pending_customers: 0 } });
+    expect(groupByCustomer([])).toEqual({ customers: [], totals: { pending: 0, pending_customers: 0, overdue: 0, overdue_customers: 0 } });
   });
 });
 
@@ -93,5 +93,38 @@ describe('groupTotals', () => {
   it('is empty when nobody owes anything', () => {
     expect(groupTotals(groupByCustomer([rows[3]]).customers)).toEqual([]);
     expect(groupTotals([])).toEqual([]);
+  });
+});
+
+describe('overdue', () => {
+  const today = '2026-10-31';
+  it('marks unpaid lines more than 7 days after the auction, with the days late', () => {
+    const { customers, totals } = groupByCustomer([
+      row({ payment_id: 'a', member_id: 'm1', auction_date: '2026-10-10', amount_due: '1000.00', amount: '400.00' }), // 21 days -> 14 late, balance 600
+      row({ payment_id: 'b', member_id: 'm1b', auction_date: '2026-10-28', amount_due: '1000.00' })                  // 3 days -> on time
+    ], { today });
+    const c = customers[0];
+    expect(c.chits.find((x) => x.payment_id === 'a').overdue_days).toBe(14);
+    expect(c.chits.find((x) => x.payment_id === 'b').overdue_days).toBe(0);
+    expect(c.overdue_count).toBe(1);
+    expect(c.overdue_amount).toBe(600);
+    expect(c.max_overdue_days).toBe(14);
+    expect(totals.overdue).toBe(600);
+    expect(totals.overdue_customers).toBe(1);
+  });
+
+  it('never marks a paid line overdue, and nothing is overdue without a date for today', () => {
+    const paid = groupByCustomer([row({ auction_date: '2026-01-01', amount: '1900.00', is_paid: true })], { today });
+    expect(paid.customers[0].overdue_count).toBe(0);
+    const noToday = groupByCustomer([row({ auction_date: '2026-01-01' })]);
+    expect(noToday.customers[0].overdue_count).toBe(0);
+  });
+
+  it('lists people with overdue payments before others who owe', () => {
+    const { customers } = groupByCustomer([
+      row({ payment_id: 'a', member_id: 'm1', member_name: 'Aaa', member_phone: '0771111111', auction_date: '2026-10-29' }),
+      row({ payment_id: 'b', member_id: 'm2', member_name: 'Zzz', member_phone: '0772222222', auction_date: '2026-09-01' })
+    ], { today });
+    expect(customers.map((c) => c.name)).toEqual(['Zzz', 'Aaa']);
   });
 });

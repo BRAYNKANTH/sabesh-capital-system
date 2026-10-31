@@ -7,6 +7,7 @@ import { groupTotals } from '@/lib/services/chitCollections.js';
 import { chipColors } from '@/lib/services/chitCode.js';
 import ChitInstalmentBox from './ChitInstalmentBox.jsx';
 import ChitGroupChip from './ChitGroupChip.jsx';
+import ChitOverdueTag from './ChitOverdueTag.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dial = (phone) => (phone || '').replace(/[^0-9+]/g, '');
@@ -62,7 +63,7 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('owing'); // 'owing' | 'paid' | 'all'
+  const [filter, setFilter] = useState('owing'); // 'owing' | 'overdue' | 'paid' | 'all'
   const [confirming, setConfirming] = useState(null); // customer key awaiting "Confirm"
   const [busy, setBusy] = useState(null); // payment id or customer key being saved
 
@@ -120,13 +121,14 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
   const all = data?.customers || [];
   const owingCount = all.filter(c => c.pending_count > 0).length;
   const paidCount = all.length - owingCount;
+  const overdueCount = all.filter(c => c.overdue_count > 0).length;
   const paymentsOwing = all.reduce((s, c) => s + c.pending_count, 0);
   const byGroup = groupTotals(all);
 
   const q = search.trim().toLowerCase();
   const customers = all
     .filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone || '').includes(q))
-    .filter(c => filter === 'all' || (filter === 'owing' ? c.pending_count > 0 : c.pending_count === 0));
+    .filter(c => filter === 'all' || (filter === 'owing' ? c.pending_count > 0 : filter === 'overdue' ? c.overdue_count > 0 : c.pending_count === 0));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -152,6 +154,11 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
                 <div style={{ fontSize: '14px', opacity: 0.95 }}>
                   from {data.totals.pending_customers} {data.totals.pending_customers === 1 ? 'person' : 'people'} · {paymentsOwing} {paymentsOwing === 1 ? 'payment' : 'payments'}
                 </div>
+                {data.totals.overdue > 0 && (
+                  <div style={{ marginTop: '10px', background: 'rgba(255, 255, 255, 0.16)', borderRadius: '12px', padding: '8px 12px', fontSize: '14px', fontWeight: 700 }}>
+                    LKR {money(data.totals.overdue)} overdue · {data.totals.overdue_customers} {data.totals.overdue_customers === 1 ? 'person' : 'people'}
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -186,7 +193,7 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
           {/* Find and filter */}
           <input type="search" className="glass-input" placeholder="Search by name or phone" aria-label="Search people" value={search} onChange={e => setSearch(e.target.value)} />
           <div className="chit-seg" role="tablist" aria-label="Show" style={{ marginBottom: 0 }}>
-            {[['owing', `Owing (${owingCount})`], ['paid', `Paid (${paidCount})`], ['all', 'All']].map(([key, label]) => (
+            {[['owing', `Owing (${owingCount})`], ...(overdueCount > 0 ? [['overdue', `Overdue (${overdueCount})`]] : []), ['paid', `Paid (${paidCount})`], ['all', 'All']].map(([key, label]) => (
               <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}>{label}</button>
             ))}
           </div>
@@ -196,7 +203,7 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
               {all.length === 0
                 ? 'Nothing to collect yet. Run a round\'s auction in a group to create its payments.'
                 : q ? 'No one matches that search.'
-                  : filter === 'owing' ? 'Everyone has paid.' : 'No one here yet.'}
+                  : filter === 'owing' ? 'Everyone has paid.' : filter === 'overdue' ? 'Nothing is overdue.' : 'No one here yet.'}
             </p>
           )}
         </>
@@ -224,7 +231,10 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '10px 16px', background: owes ? 'rgba(220, 38, 38, 0.07)' : 'rgba(4, 120, 87, 0.08)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)' }}>
               {owes ? (
                 <>
-                  <span style={{ ...smallCaps, color: 'var(--text-secondary)' }}>Owes</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ ...smallCaps, color: 'var(--text-secondary)' }}>Owes</span>
+                    {c.overdue_count > 0 && <ChitOverdueTag days={c.max_overdue_days} />}
+                  </span>
                   <strong style={{ fontSize: '19px', color: 'var(--accent-rose)', whiteSpace: 'nowrap' }}>LKR {money(c.total_pending)}</strong>
                 </>
               ) : (
@@ -247,7 +257,10 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
                         <strong style={{ overflowWrap: 'anywhere' }}>{x.group_name}</strong>
                         <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Round {x.round_number}</span>
                       </span>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: '999px', padding: '2px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{st.label}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+                        <ChitOverdueTag days={x.overdue_days} />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: st.color, border: `1px solid ${st.color}`, borderRadius: '999px', padding: '2px 10px', whiteSpace: 'nowrap' }}>{st.label}</span>
+                      </span>
                     </div>
 
                     <div aria-hidden="true" style={{ height: '6px', borderRadius: '999px', background: 'var(--border-light)', overflow: 'hidden' }}>

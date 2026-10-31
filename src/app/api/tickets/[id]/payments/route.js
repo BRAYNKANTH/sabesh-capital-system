@@ -34,6 +34,7 @@ function paymentWithNames() {
       'ticket_members.name as member_name',
       'ticket_members.phone as member_phone',
       'ticket_auctions.amount_per_member as amount_due',
+      'ticket_auctions.auction_date',
       'collectors.name as collected_by_name'
     );
 }

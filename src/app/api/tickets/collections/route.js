@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db.js';
 import { requireAuth, AuthError } from '@/lib/auth.js';
 import { groupByCustomer } from '@/lib/services/chitCollections.js';
+import { getSriLankaDateString } from '@/lib/loanSchedule.js';
 import { logError } from '@/lib/logger.js';
 
 // Everything still to collect, one entry per person. Someone who is in more than
@@ -41,10 +42,10 @@ export async function GET(request) {
         'ticket_payments.id as payment_id', 'ticket_payments.member_id', 'ticket_payments.ticket_id', 'ticket_payments.round_number',
         'ticket_payments.is_paid', 'ticket_payments.amount', 'ticket_payments.payment_date',
         'ticket_members.name as member_name', 'ticket_members.phone as member_phone',
-        'ticket_auctions.amount_per_member as amount_due', 'collectors.name as collected_by_name'
+        'ticket_auctions.amount_per_member as amount_due', 'ticket_auctions.auction_date', 'collectors.name as collected_by_name'
       );
 
-    return NextResponse.json(groupByCustomer(rows.map((r) => ({ ...r, group_name: groupName.get(r.ticket_id) || '', group_code: groupCode.get(r.ticket_id) || null }))));
+    return NextResponse.json(groupByCustomer(rows.map((r) => ({ ...r, group_name: groupName.get(r.ticket_id) || '', group_code: groupCode.get(r.ticket_id) || null })), { today: getSriLankaDateString() }));
   } catch (error) {
     if (error instanceof AuthError) return NextResponse.json({ message: error.message }, { status: error.status });
     logError('Chit collection list error', error, { method: request.method, url: request.url });

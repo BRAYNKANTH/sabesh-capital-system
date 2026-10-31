@@ -3,6 +3,9 @@
 import React from 'react';
 import { Phone, MessageSquare } from 'lucide-react';
 import ChitInstalmentBox from './ChitInstalmentBox.jsx';
+import ChitOverdueTag from './ChitOverdueTag.jsx';
+import { overdueDays } from '@/lib/services/chitOverdue.js';
+import { getSriLankaDateString } from '@/lib/loanSchedule.js';
 
 const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Whole cents, so 0.1 + 0.2 style noise can never show as a balance.
@@ -55,6 +58,9 @@ function BalanceText({ p }) {
   return <span style={{ color: 'var(--text-muted)' }}>—</span>;
 }
 
+// Days past due for an unpaid or part-paid row (0 when on time, paid, or before the auction).
+const lateDays = (p) => (p.is_paid || !hasDue(p) ? 0 : overdueDays(p.auction_date, getSriLankaDateString()));
+
 const lastPayment = (p) => (paidSoFar(p) > 0 && p.payment_date ? new Date(p.payment_date).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : null);
 
 // One member per row (a card on phones): what is due, what has been paid, what
@@ -93,7 +99,10 @@ export default function ChitPaymentsTable({ rows, isAdmin, busyKey, onCollect, o
                   {paidSoFar(p) > 0 ? `LKR ${money(paidSoFar(p))}` : '—'}
                 </td>
                 <td style={{ ...cell, fontWeight: 'bold' }}><BalanceText p={p} /></td>
-                <td style={cell}><StatusPill p={p} /></td>
+                <td style={cell}>
+                  <StatusPill p={p} />
+                  {lateDays(p) > 0 && <div style={{ marginTop: '6px' }}><ChitOverdueTag days={lateDays(p)} /></div>}
+                </td>
                 <td style={{ ...cell, fontSize: '13px' }}>
                   {lastPayment(p) ? (
                     <>
@@ -118,7 +127,10 @@ export default function ChitPaymentsTable({ rows, isAdmin, busyKey, onCollect, o
           <div key={keyOf(p)} className={`mobile-row-card ${CARD_CLASS[statusOf(p)]}`} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
               <span className="mobile-row-card-title" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{p.member_name}</span>
-              <StatusPill p={p} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <ChitOverdueTag days={lateDays(p)} />
+                <StatusPill p={p} />
+              </span>
             </div>
             {dial(p.member_phone) && <div style={{ fontSize: '13px' }}><Contact phone={p.member_phone} /></div>}
 

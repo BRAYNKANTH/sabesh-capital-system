@@ -10,6 +10,7 @@ import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
 import ChitPaymentsTable from './ChitPaymentsTable.jsx';
 import ChitGroupChip from './ChitGroupChip.jsx';
+import ChitPayoutStatus from './ChitPayoutStatus.jsx';
 import { suggestCode } from '@/lib/services/chitCode.js';
 import ChitCollectCenter from './ChitCollectCenter.jsx';
 import { Gem, Pencil, Undo2 } from 'lucide-react';
@@ -1711,6 +1712,39 @@ export default function LendApp() {
     });
   };
 
+  // Record that the round's winner has been handed their money (takes the cash out
+  // in the ledger), or take that record back.
+  const handleMarkPayout = (a) => {
+    const payout = parseFloat(a.winner_payout) || 0;
+    const collected = parseFloat(a.collected_total) || 0;
+    const fmt = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    openActionModal({
+      title: `Pay out round ${a.round_number}`,
+      message: `Record that ${a.winner_name} has been paid. This takes the cash out of the office in the ledger.${collected + 0.005 < payout ? ` Only LKR ${fmt(collected)} of the LKR ${fmt(payout)} has been collected so far.` : ''}`,
+      fields: [{ key: 'amount', label: 'Amount paid to the winner (LKR)', type: 'number', required: true, initialValue: String(payout) }],
+      confirmLabel: 'Mark payout paid',
+      onConfirm: async (values) => {
+        await api.post(`/tickets/${selectedTicket.id}/auctions/${a.id}/payout`, { amount: parseFloat(values.amount) });
+        showToast(`Payout for round ${a.round_number} recorded.`);
+        fetchTicketDetails(selectedTicket.id);
+      },
+    });
+  };
+
+  const handleUndoPayout = (a) => {
+    openActionModal({
+      title: `Undo the payout for round ${a.round_number}`,
+      message: `This takes back the record that ${a.winner_name} was paid and puts the cash back in the ledger. Use it if it was marked by mistake.`,
+      confirmLabel: 'Undo payout',
+      danger: true,
+      onConfirm: async () => {
+        const res = await api.delete(`/tickets/${selectedTicket.id}/auctions/${a.id}/payout`);
+        showToast(res.message);
+        fetchTicketDetails(selectedTicket.id);
+      },
+    });
+  };
+
   const handleAssignAuctionWinner = async (auctionId) => {
     if (!assignWinnerMemberId) {
       showToast('Choose a member first.', 'error');
@@ -1839,7 +1873,7 @@ export default function LendApp() {
         auction_date: auctionForm.auction_date,
         next_round_date: auctionForm.next_round_date || undefined
       });
-      showToast(`Successfully recorded auction for round ${result.round_number}.`);
+      showToast(`Successfully recorded auction for round ${result.round_number}.${result.winner_name ? ` Winner: ${result.winner_name}.` : ''}`);
       // Refresh details
       fetchTicketDetails(selectedTicketIdState);
     } catch (err) {
@@ -3967,6 +4001,12 @@ export default function LendApp() {
                             </div>
                           </div>
 
+                          {t.overdue_count > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#fde8e8', color: '#9b1c1c', borderRadius: '12px', padding: '8px 12px', marginBottom: '12px', fontSize: '13px', fontWeight: 700 }}>
+                              <span>{t.overdue_count} overdue {t.overdue_count === 1 ? 'payment' : 'payments'}</span>
+                              <span>LKR {Number(t.overdue_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
                           <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)' }}>
                             <span>Start: <strong>{new Date(t.start_date).toLocaleDateString()}</strong></span>
                             <span>Round: <strong style={{ color: 'var(--accent-blue)' }}>{t.status === 'completed' ? 'All Completed' : `${t.current_round} of ${t.member_count}`}</strong></span>
@@ -4057,7 +4097,7 @@ export default function LendApp() {
                                 <option key={m.id} value={m.id}>{m.name}</option>
                               ))}
                             </select>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Only shows members who haven't already won a previous round.</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>Only shows members who haven't already won a previous round. On the last round, the one member left wins automatically.</span>
                           </div>
 
                           <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -4474,7 +4514,10 @@ export default function LendApp() {
                                       </span>
                                     )}
                                   </td>
-                                  <td style={{ color: 'var(--accent-emerald)', fontWeight: 'bold' }}>LKR {parseFloat(a.winner_payout).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td>
+                                    <strong style={{ color: 'var(--accent-emerald)', display: 'block', marginBottom: '6px' }}>LKR {parseFloat(a.winner_payout).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                    <ChitPayoutStatus auction={a} isAdmin={user.role === 'admin'} onPay={handleMarkPayout} onUndo={handleUndoPayout} />
+                                  </td>
                                   <td>LKR {parseFloat(a.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td>LKR {(parseFloat(a.host_fee_per_member) * selectedTicket.member_count).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   {user.role === 'admin' && (
@@ -4528,6 +4571,9 @@ export default function LendApp() {
 
                                 <span className="mobile-row-card-label">Payout</span>
                                 <span className="mobile-row-card-value" style={{ color: 'var(--accent-emerald)' }}>LKR {parseFloat(a.winner_payout).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                  <ChitPayoutStatus auction={a} isAdmin={user.role === 'admin'} onPay={handleMarkPayout} onUndo={handleUndoPayout} />
+                                </div>
 
                                 <span className="mobile-row-card-label">Per Member</span>
                                 <span className="mobile-row-card-value">LKR {parseFloat(a.amount_per_member).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -8511,12 +8557,15 @@ export default function LendApp() {
                 { tab: 'payments', label: 'Payments', Icon: CreditCard, active: activeTicketTab === 'payments' },
                 { tab: 'auction', label: 'Auction', Icon: TrendingUp, active: activeTicketTab === 'auction' },
                 { tab: 'members', label: 'Members', Icon: Users, active: activeTicketTab === 'members' || activeTicketTab === 'details' },
-                { tab: 'history', label: 'History', Icon: ScrollText, active: activeTicketTab === 'history' }
+                { tab: 'history', label: 'History', Icon: ScrollText, active: activeTicketTab === 'history', badge: ticketAuctions.filter((a) => a.winner_member_id && a.payout_paid_at === null).length }
               ];
               return sections.map((x) => (
-                <button key={x.tab} className={`bottom-nav-item ${x.active ? 'active' : ''}`} {...tag(x.active)} onClick={() => { setActiveTicketTab(x.tab); window.scrollTo(0, 0); }}>
+                <button key={x.tab} className={`bottom-nav-item ${x.active ? 'active' : ''}`} {...tag(x.active)} style={{ position: 'relative' }} onClick={() => { setActiveTicketTab(x.tab); window.scrollTo(0, 0); }}>
                   <span className="bottom-nav-icon"><x.Icon /></span>
                   <span className="bottom-nav-label">{x.label}</span>
+                  {x.badge > 0 && (
+                    <span className="badge badge-pending" style={{ position: 'absolute', top: '2px', right: '10px', padding: '1px 5px', fontSize: '12px' }} aria-label={`${x.badge} winner ${x.badge === 1 ? 'payout' : 'payouts'} to pay`}>{x.badge}</span>
+                  )}
                 </button>
               ));
             }

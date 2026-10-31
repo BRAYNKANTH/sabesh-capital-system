@@ -668,6 +668,12 @@ async function runIncrementalMigrations() {
     console.warn(`Migration: could not make group codes unique (${err.message}).`);
   }
 
+  // Winner payouts: when the host hands a round's pot to the winner it is recorded
+  // here (how much, when, by whom) and posted to the ledger as cash out.
+  await addColumnIfMissing('ticket_auctions', 'payout_paid_amount', (t) => t.decimal('payout_paid_amount', 15, 2).nullable());
+  await addColumnIfMissing('ticket_auctions', 'payout_paid_at', (t) => t.timestamp('payout_paid_at').nullable());
+  await addColumnIfMissing('ticket_auctions', 'payout_paid_by', (t) => t.uuid('payout_paid_by').nullable().references('id').inTable('users').onDelete('SET NULL'));
+
   // The pawn portal's own double-entry ledger (accounts: pawn_cash,
   // pawn_receivable_principal, pawn_receivable_interest, pawn_interest_revenue,
   // pawn_written_off_expense, pawn_surplus_payable).
