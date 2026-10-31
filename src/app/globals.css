@@ -2621,3 +2621,23 @@ table.desktop-only {
     white-space: nowrap;
   }
 }
+
+/* Contact icons on the chit screens: a full 44px touch target on phones. */
+@media (max-width: 768px) {
+  .quick-contact-btn.chit-hit { width: 44px; height: 44px; }
+}
+
+/* "Skip to content": the first thing a keyboard user can reach, hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 3000;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 700;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}
+.skip-link:focus { left: 8px; }

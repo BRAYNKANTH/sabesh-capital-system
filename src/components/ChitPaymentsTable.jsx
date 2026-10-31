@@ -31,7 +31,7 @@ function Contact({ phone }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
       <a href={`tel:${dial(phone)}`} className="phone-link" aria-label={`Call ${phone}`}>{phone}</a>
-      <a href={`https://wa.me/${whatsappNumber(phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp" aria-label={`WhatsApp ${phone}`}>
+      <a href={`https://wa.me/${whatsappNumber(phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp chit-hit" title="Chat on WhatsApp" aria-label={`WhatsApp ${phone}`}>
         <MessageSquare style={{ width: '12px', height: '12px' }} aria-hidden="true" />
       </a>
     </span>

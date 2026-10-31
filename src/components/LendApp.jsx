@@ -19,7 +19,7 @@ import {
   Printer, FileText, TrendingUp, Bell, BarChart3, Zap, AlertTriangle,
   Briefcase, Truck, BookOpen, ArrowDown, User, Settings, Ban, Receipt,
   Search, CreditCard, Smartphone, PiggyBank, MessageSquare, UserPlus, Trash2, ClipboardCheck,
-  CircleCheck, CircleAlert, RefreshCcw, Download, ChevronRight, Calendar,
+  CircleCheck, CircleAlert, RefreshCcw, Download, ChevronRight, ChevronDown, Calendar,
   Plus, ThumbsUp, ThumbsDown, Clock, Filter, LayoutGrid, Camera
 } from 'lucide-react';
 
@@ -340,6 +340,8 @@ export default function LendApp() {
   const [newMemberGuarantor, setNewMemberGuarantor] = useState(null); // null = no guarantor, else { nic_number, phone }
   const [memberDetailsDialog, setMemberDetailsDialog] = useState(null); // { member, details, guarantor, loaded, saving, error }
   const [memberAddMode, setMemberAddMode] = useState('single'); // 'single' or 'bulk'
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [openMemberId, setOpenMemberId] = useState(null); // roster row that is expanded
   const [bulkMemberText, setBulkMemberText] = useState('');
   const [bulkAddingMembers, setBulkAddingMembers] = useState(false);
   const [auctionForm, setAuctionForm] = useState({ bid_amount: '', winner_member_id: '', auction_date: new Date().toISOString().slice(0, 10), next_round_date: '' });
@@ -2661,6 +2663,7 @@ export default function LendApp() {
   useEscapeToClose(showDeleteLoanModal, () => { setShowDeleteLoanModal(false); setDeleteLoanForm({ reason: '', password: '' }); });
   useEscapeToClose(showSettings, () => setShowSettings(false));
   useEscapeToClose(showCreateTicket, () => setShowCreateTicket(false));
+  useEscapeToClose(showCollectCenter, () => setShowCollectCenter(false));
   useEscapeToClose(!!editingUser, () => setEditingUser(null));
   useEscapeToClose(showMoreMenu, () => setShowMoreMenu(false));
   useEscapeToClose(!!actionModal, closeActionModal);
@@ -2678,6 +2681,7 @@ export default function LendApp() {
   const deleteLoanModalRef = useRef(null);
   const settingsModalRef = useRef(null);
   const createTicketModalRef = useRef(null);
+  const collectCenterModalRef = useRef(null);
   const editingUserModalRef = useRef(null);
   const moreMenuModalRef = useRef(null);
   const actionModalRef = useRef(null);
@@ -2691,6 +2695,7 @@ export default function LendApp() {
   useFocusTrap(showDeleteLoanModal, deleteLoanModalRef);
   useFocusTrap(showSettings, settingsModalRef);
   useFocusTrap(showCreateTicket, createTicketModalRef);
+  useFocusTrap(showCollectCenter, collectCenterModalRef);
   useFocusTrap(!!editingUser, editingUserModalRef);
   useFocusTrap(showMoreMenu, moreMenuModalRef);
 
@@ -2712,6 +2717,7 @@ export default function LendApp() {
 
   return (
     <div>
+      <a href="#main-content" className="skip-link">Skip to content</a>
       {/* Digital Receipt Modal (Screen View) */}
       {selectedReceipt && (
         <div className="receipt-modal-overlay" onClick={() => setSelectedReceipt(null)}>
@@ -3587,7 +3593,7 @@ export default function LendApp() {
       )}
 
       {/* Main container */}
-      <main className="dashboard-container">
+      <main id="main-content" tabIndex={-1} className="dashboard-container">
         
         {/* Error panel */}
         {error && (
@@ -3798,7 +3804,7 @@ export default function LendApp() {
 
                 {showCollectCenter && (
                   <div className="receipt-modal-overlay" onClick={() => setShowCollectCenter(false)}>
-                    <div className="glass-card" role="dialog" aria-modal="true" aria-label="Collect chit payments" style={{ maxWidth: '640px', width: '94%', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                    <div ref={collectCenterModalRef} tabIndex={-1} className="glass-card" role="dialog" aria-modal="true" aria-label="Collect chit payments" style={{ maxWidth: '640px', width: '94%', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
                       <ChitCollectCenter isAdmin={user.role === 'admin'} onClose={() => setShowCollectCenter(false)} onChanged={() => setCollectionsRefresh(k => k + 1)} showToast={showToast} />
                     </div>
                   </div>
@@ -3807,7 +3813,7 @@ export default function LendApp() {
                 {/* Create Ticket Group Modal */}
                 {showCreateTicket && (
                   <div className="receipt-modal-overlay" onClick={() => setShowCreateTicket(false)}>
-                    <div ref={createTicketModalRef} tabIndex={-1} className="glass-card" style={{ maxWidth: '540px', width: '90%', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                    <div ref={createTicketModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Create chit group" className="glass-card" style={{ maxWidth: '540px', width: '90%', padding: '24px' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '20px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><PiggyBank className="icon" /> Create New Chit Group</h3>
                         <button className="glass-btn glass-btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setShowCreateTicket(false)}>Close</button>
@@ -3922,7 +3928,7 @@ export default function LendApp() {
                             <button
                               type="button"
                               className="glass-btn glass-btn-secondary"
-                              style={{ position: 'absolute', top: '14px', right: '14px', padding: '5px 9px', fontSize: '12px' }}
+                              style={{ position: 'absolute', top: '10px', right: '10px', padding: '5px 9px', fontSize: '12px', minWidth: '44px', minHeight: '44px' }}
                               onClick={(e) => openEditTicket(t, e)}
                               title={`Edit '${t.name}'`}
                               aria-label={`Edit ${t.name}`}
@@ -3930,7 +3936,7 @@ export default function LendApp() {
                               <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
                             </button>
                           )}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '52px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', paddingRight: '56px' }}>
                             <div style={{ minWidth: 0 }}>
                               {t.code && <div style={{ marginBottom: '4px' }}><ChitGroupChip code={t.code} /></div>}
                               <h3 style={{ fontSize: '18px', margin: 0, fontWeight: 'bold' }}>{t.name}</h3>
@@ -4230,65 +4236,85 @@ export default function LendApp() {
                     {/* Roster list */}
                     <div className="glass-card" style={{ padding: '24px' }}>
                       <h3 style={{ fontSize: '18px', marginBottom: '14px', fontWeight: 'bold' }}><Users className="icon" /> Roster of Members</h3>
-                      {ticketMembers.length === 0 ? (
-                        <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No members added to this group yet.</p>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border-light)', borderRadius: '12px', overflow: 'hidden' }}>
-                          {ticketMembers.map((m, idx) => {
-                            const wonAuction = ticketAuctions.find(a => a.winner_member_id === m.id);
-                            return (
-                              <div key={m.id} className="ticket-member-row">
-                                <div>
-                                  <strong style={{ display: 'block', fontSize: '14px' }}>{idx + 1}. {m.name}</strong>
-                                  {m.phone && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                      <PhoneLink phone={m.phone} />
-                                      <span className="quick-contact-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '4px' }}>
-                                        <a href={`tel:${m.phone}`} className="quick-contact-btn phone" title="Call Member">
-                                          <Phone style={{ width: '11px', height: '11px' }} />
-                                        </a>
-                                        <a href={`https://wa.me/${(m.phone || '').replace(/[^0-9]/g, '').startsWith('0') ? '94' + (m.phone || '').replace(/[^0-9]/g, '').slice(1) : (m.phone || '').replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp">
-                                          <MessageSquare style={{ width: '11px', height: '11px' }} />
-                                        </a>
-                                      </span>
+                      {(() => {
+                        const q = rosterSearch.trim().toLowerCase();
+                        const rows = ticketMembers.map((m, idx) => ({ m, idx })).filter(({ m }) => !q || m.name.toLowerCase().includes(q) || (m.phone || '').includes(q));
+                        const chip = (bg, fg, text) => <span style={{ background: bg, color: fg, fontWeight: 700, fontSize: '12px', borderRadius: '999px', padding: '3px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{text}</span>;
+                        const wa = (phone) => { const d = (phone || '').replace(/[^0-9]/g, ''); return d.startsWith('0') ? '94' + d.slice(1) : d; };
+                        return (
+                          <>
+                            {ticketMembers.length > 6 && (
+                              <input type="search" className="glass-input" placeholder="Search members" aria-label="Search members" value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} style={{ marginBottom: '12px' }} />
+                            )}
+                            {ticketMembers.length === 0 ? (
+                              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No members added to this group yet.</p>
+                            ) : rows.length === 0 ? (
+                              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No member matches that search.</p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border-light)', borderRadius: '14px', overflow: 'hidden' }}>
+                                {rows.map(({ m, idx }, n) => {
+                                  const wonAuction = ticketAuctions.find(a => a.winner_member_id === m.id);
+                                  const open = openMemberId === m.id;
+                                  return (
+                                    <div key={m.id} style={{ padding: '6px 12px 10px', borderTop: n === 0 ? 'none' : '1px solid var(--border-light)', background: open ? 'var(--bg-tertiary)' : 'var(--bg-secondary)' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <button
+                                          type="button"
+                                          aria-expanded={open}
+                                          aria-controls={`roster-${m.id}`}
+                                          onClick={() => setOpenMemberId(open ? null : m.id)}
+                                          style={{ flex: 1, minWidth: 0, minHeight: '44px', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', font: 'inherit' }}
+                                        >
+                                          <span style={{ color: 'var(--text-secondary)', fontSize: '13px', minWidth: '24px' }}>{idx + 1}.</span>
+                                          <strong style={{ fontSize: '15px', overflowWrap: 'anywhere' }}>{m.name}</strong>
+                                          <ChevronDown aria-hidden="true" style={{ width: '16px', height: '16px', flexShrink: 0, color: 'var(--text-secondary)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                                        </button>
+                                        {wonAuction ? chip('#dbe7ff', '#1e3a8a', `Won Round ${wonAuction.round_number}`) : chip('#e8edf5', '#334155', 'Not won yet')}
+                                      </div>
+                                      {m.phone && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingLeft: '32px' }}>
+                                          <PhoneLink phone={m.phone} showIcon={false} />
+                                          <a href={`tel:${m.phone}`} className="quick-contact-btn phone chit-hit" aria-label={`Call ${m.name}`}>
+                                            <Phone style={{ width: '13px', height: '13px' }} aria-hidden="true" />
+                                          </a>
+                                          <a href={`https://wa.me/${wa(m.phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp chit-hit" aria-label={`WhatsApp ${m.name}`}>
+                                            <MessageSquare style={{ width: '13px', height: '13px' }} aria-hidden="true" />
+                                          </a>
+                                        </div>
+                                      )}
+                                      {open && (
+                                        <div id={`roster-${m.id}`} style={{ paddingLeft: '32px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                            {m.details ? (
+                                              <span>NIC <strong>{m.details.nic_number}</strong>{m.details.nic_photo_count > 0 ? ` · ${m.details.nic_photo_count} NIC photo${m.details.nic_photo_count === 1 ? '' : 's'}` : ''}</span>
+                                            ) : chip('#fef3c7', '#78350f', 'No details yet')}
+                                          </div>
+                                          {m.guarantor && (
+                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                              Guarantor: NIC <strong>{m.guarantor.nic_number}</strong> <PhoneLink phone={m.guarantor.phone} showIcon={false} />
+                                            </div>
+                                          )}
+                                          {user.role === 'admin' && (
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                              <button type="button" className="glass-btn glass-btn-secondary" style={{ minHeight: '44px', padding: '8px 14px', fontSize: '13px' }} onClick={() => openMemberDetailsDialog(m)}>{m.details ? 'View details' : 'Add details'}</button>
+                                              <button type="button" className="glass-btn glass-btn-secondary" style={{ minHeight: '44px', padding: '8px 14px', fontSize: '13px' }} onClick={() => openEditMember(m)}>
+                                                <Pencil className="icon" style={{ width: '14px', height: '14px' }} aria-hidden="true" /> Edit
+                                              </button>
+                                              <button type="button" className="glass-btn glass-btn-secondary" style={{ minHeight: '44px', padding: '8px 14px', fontSize: '13px', color: 'var(--accent-rose)', borderColor: 'var(--accent-rose)' }} onClick={() => handleRemoveTicketMember(m)}>
+                                                <Trash2 className="icon" style={{ width: '14px', height: '14px' }} aria-hidden="true" /> Remove
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                  <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                    {m.details ? (
-                                      <span>NIC <strong>{m.details.nic_number}</strong>{m.details.nic_photo_count > 0 ? ` · ${m.details.nic_photo_count} NIC photo${m.details.nic_photo_count === 1 ? '' : 's'}` : ''}</span>
-                                    ) : (
-                                      <span className="badge badge-pending" style={{ fontSize: '12px' }}>No details yet</span>
-                                    )}
-                                  </div>
-                                  {m.guarantor && (
-                                    <div style={{ marginTop: '2px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                      Guarantor: NIC <strong>{m.guarantor.nic_number}</strong> <PhoneLink phone={m.guarantor.phone} showIcon={false} />
-                                    </div>
-                                  )}
-                                </div>
-                                <div>
-                                  {wonAuction ? (
-                                    <span className="badge badge-active" style={{ background: 'rgba(37, 84, 232, 0.1)', color: 'var(--accent-blue)', fontSize: '12px' }}>Won Round {wonAuction.round_number}</span>
-                                  ) : (
-                                    <span className="badge badge-defaulted" style={{ fontSize: '12px' }}>Not Won</span>
-                                  )}
-                                </div>
-                                {user.role === 'admin' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginLeft: '10px' }}>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => openMemberDetailsDialog(m)}>{m.details ? 'Details' : 'Add details'}</button>
-                                    <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => openEditMember(m)} title={`Edit ${m.name}`} aria-label={`Edit ${m.name}`}>
-                                      <Pencil className="icon" style={{ width: '13px', height: '13px' }} />
-                                    </button>
-                                    <button type="button" className="glass-btn glass-btn-rose" style={{ padding: '5px 9px', fontSize: '12px' }} onClick={() => handleRemoveTicketMember(m)} title={`Remove ${m.name}`} aria-label={`Remove ${m.name}`}>
-                                      <Trash2 className="icon" style={{ width: '13px', height: '13px' }} />
-                                    </button>
-                                  </div>
-                                )}
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {/* Add member form */}
@@ -4303,7 +4329,7 @@ export default function LendApp() {
                                 type="button"
                                 onClick={() => setMemberAddMode(m)}
                                 style={{
-                                  padding: '5px 12px', fontSize: '12px', fontWeight: '700', textTransform: 'capitalize', borderRadius: '6px', border: 'none', cursor: 'pointer',
+                                  padding: '5px 14px', minHeight: '44px', fontSize: '13px', fontWeight: '700', textTransform: 'capitalize', borderRadius: '6px', border: 'none', cursor: 'pointer',
                                   background: memberAddMode === m ? 'var(--accent-blue)' : 'transparent',
                                   color: memberAddMode === m ? '#fff' : 'var(--text-secondary)'
                                 }}
@@ -4366,8 +4392,8 @@ export default function LendApp() {
 
                       {/* Round selector */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Round:</span>
-                        <select className="glass-input" style={{ width: pendingRound ? '230px' : '110px', maxWidth: '100%', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
+                        <label htmlFor="chit-round-select" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>Round:</label>
+                        <select id="chit-round-select" className="glass-input" style={{ width: pendingRound ? '230px' : '110px', maxWidth: '100%', padding: '6px 12px' }} value={ticketPaymentFilterRound} onChange={e => { setTicketPaymentFilterRound(e.target.value); handleFetchTicketPaymentsByRound(e.target.value); }}>
                           {Array.from({ length: selectedTicket.status === 'completed' ? selectedTicket.member_count : selectedTicket.current_round - 1 }, (_, i) => i + 1).map(r => (
                             <option key={r} value={r}>Round {r}</option>
                           ))}

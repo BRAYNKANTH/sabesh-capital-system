@@ -214,7 +214,7 @@ export default function ChitCollectCenter({ isAdmin, onClose, onChanged, showToa
                 {dial(c.phone) ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '14px', marginTop: '4px' }}>
                     <a href={`tel:${dial(c.phone)}`} className="phone-link" aria-label={`Call ${c.phone}`}>{c.phone}</a>
-                    <a href={`https://wa.me/${whatsappNumber(c.phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp" title="Chat on WhatsApp" aria-label={`WhatsApp ${c.phone}`}>
+                    <a href={`https://wa.me/${whatsappNumber(c.phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp chit-hit" title="Chat on WhatsApp" aria-label={`WhatsApp ${c.phone}`}>
                       <MessageSquare style={{ width: '12px', height: '12px' }} aria-hidden="true" />
                     </a>
                   </span>
