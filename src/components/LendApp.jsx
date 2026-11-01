@@ -5,6 +5,7 @@ import { api } from '@/lib/apiClient.js';
 import { submitPaymentOrQueue, syncQueuedPayments, getQueueCount, onQueueChanged } from '@/lib/offlineQueue.js';
 import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
+import SalaryPortal from './SalaryPortal.jsx';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
@@ -187,6 +188,7 @@ function portalHomeFor(u) {
   if (u.finance_access) portals.push('dashboard');
   if (u.ticket_access) portals.push('ticket-dashboard');
   if (u.role === 'admin' && u.pawn_access) portals.push('pawn-dashboard');
+  if (u.role === 'admin' && u.salary_access) portals.push('salary-dashboard');
   return portals.length === 1 ? portals[0] : 'portal';
 }
 // "YYYY-MM-DD" in the browser's local time (what a <date> value should be).
@@ -208,7 +210,7 @@ function PhoneLink({ phone, showIcon = true }) {
   );
 }
 function canSwitchPortals(u) {
-  return [u.finance_access !== false, u.ticket_access !== false, u.role === 'admin' && u.pawn_access === true].filter(Boolean).length > 1;
+  return [u.finance_access !== false, u.ticket_access !== false, u.role === 'admin' && u.pawn_access === true, u.role === 'admin' && u.salary_access === true].filter(Boolean).length > 1;
 }
 
 export default function LendApp() {
@@ -227,7 +229,7 @@ export default function LendApp() {
   // Payment, Agent Route, Interest Center, Payment History, Audit Log —
   // dropped straight back to the dashboard.
   const RESTORABLE_VIEWS = [
-    'dashboard', 'portal', 'ticket-dashboard', 'pawn-dashboard',
+    'dashboard', 'portal', 'ticket-dashboard', 'pawn-dashboard', 'salary-dashboard',
     'create-loan', 'next-day-tasklist', 'record-payment',
     'loans', 'agents', 'interest-center', 'payment-history',
     'audit-log', 'admin-tools', 'borrower-intakes'
@@ -318,7 +320,7 @@ export default function LendApp() {
   // not the full history.
   const [remittanceStatusFilter, setRemittanceStatusFilter] = useState('pending');
   const [showAddUser, setShowAddUser] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({ name: '', phone: '', email: '', role: 'agent', password: '', finance_access: true, ticket_access: true, pawn_access: false });
+  const [newUserForm, setNewUserForm] = useState({ name: '', phone: '', email: '', role: 'agent', password: '', finance_access: true, ticket_access: true, pawn_access: false, salary_access: false });
   const [remittances, setRemittances] = useState([]);
   const [ledgerReport, setLedgerReport] = useState(null);
   const [ledgerFrom, setLedgerFrom] = useState('');
@@ -539,7 +541,7 @@ export default function LendApp() {
 
   // Editing user details (Admin only)
   const [editingUser, setEditingUser] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({ name: '', phone: '', role: '', email: '', finance_access: true, ticket_access: true, pawn_access: false });
+  const [editUserForm, setEditUserForm] = useState({ name: '', phone: '', role: '', email: '', finance_access: true, ticket_access: true, pawn_access: false, salary_access: false });
 
   // Borrower profile details are collected for every loan now (not
   // optional) — loan purpose and monthly income are required; spouse
@@ -862,7 +864,8 @@ export default function LendApp() {
       email: targetUser.email || '',
       finance_access: targetUser.finance_access !== false,
       ticket_access: targetUser.ticket_access !== false,
-      pawn_access: targetUser.pawn_access === true
+      pawn_access: targetUser.pawn_access === true,
+      salary_access: targetUser.salary_access === true
     });
   };
 
@@ -879,7 +882,8 @@ export default function LendApp() {
         email: editUserForm.email || '',
         finance_access: !!editUserForm.finance_access,
         ticket_access: !!editUserForm.ticket_access,
-        pawn_access: editUserForm.role === 'admin' && !!editUserForm.pawn_access
+        pawn_access: editUserForm.role === 'admin' && !!editUserForm.pawn_access,
+        salary_access: editUserForm.role === 'admin' && !!editUserForm.salary_access
       });
       showToast(`User ${editUserForm.name} updated successfully.`);
       setEditingUser(null);
@@ -904,14 +908,15 @@ export default function LendApp() {
         password: newUserForm.password || undefined,
         finance_access: !!newUserForm.finance_access,
         ticket_access: !!newUserForm.ticket_access,
-        pawn_access: newUserForm.role === 'admin' && !!newUserForm.pawn_access
+        pawn_access: newUserForm.role === 'admin' && !!newUserForm.pawn_access,
+        salary_access: newUserForm.role === 'admin' && !!newUserForm.salary_access
       });
       showToast(
         result.temporaryPassword
           ? `${newUserForm.name} added as ${newUserForm.role}. Temporary password: ${result.temporaryPassword}`
           : `${newUserForm.name} added as ${newUserForm.role}.`
       );
-      setNewUserForm({ name: '', phone: '', email: '', role: 'agent', password: '', finance_access: true, ticket_access: true, pawn_access: false });
+      setNewUserForm({ name: '', phone: '', email: '', role: 'agent', password: '', finance_access: true, ticket_access: true, pawn_access: false, salary_access: false });
       setShowAddUser(false);
       refreshAdminTools();
     } catch (err) {
@@ -3216,7 +3221,7 @@ export default function LendApp() {
           </div>
 
           {/* Desktop Navigation Links */}
-          {user.role === 'admin' && view !== 'portal' && view !== 'ticket-dashboard' && view !== 'pawn-dashboard' && (
+          {user.role === 'admin' && view !== 'portal' && view !== 'ticket-dashboard' && view !== 'pawn-dashboard' && view !== 'salary-dashboard' && (
             <div className="desktop-header-nav">
               <button className={`nav-link-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => { setView('dashboard'); setSelectedLoanId(null); setLoanStatement(null); }}><Home className="icon" /> Home</button>
               <button className={`nav-link-btn ${view === 'create-loan' ? 'active' : ''}`} onClick={() => { setView('create-loan'); setSelectedLoanId(null); setLoanStatement(null); }}><Banknote className="icon" /> Give Loan</button>
@@ -3238,7 +3243,7 @@ export default function LendApp() {
               )}
             </div>
           )}
-          {user.role === 'agent' && view !== 'portal' && view !== 'ticket-dashboard' && view !== 'pawn-dashboard' && (
+          {user.role === 'agent' && view !== 'portal' && view !== 'ticket-dashboard' && view !== 'pawn-dashboard' && view !== 'salary-dashboard' && (
             <div className="desktop-header-nav">
               <button className={`nav-link-btn ${view === 'create-loan' ? 'active' : ''}`} onClick={() => { setView('create-loan'); setGiveLoanStep(1); }}><Banknote className="icon" /> Give Loan</button>
               <button className={`nav-link-btn ${view === 'borrower-intakes' ? 'active' : ''}`} onClick={() => { setView('borrower-intakes'); setSelectedLoanId(null); setLoanStatement(null); }}>
@@ -3786,6 +3791,18 @@ export default function LendApp() {
                   <div className="portal-card-action">Enter System &rarr;</div>
                 </div>
               )}
+
+              {user.role === 'admin' && user.salary_access && (
+                <div className="portal-card portal-card-blue" onClick={() => { setView('salary-dashboard'); showToast('Entering Salary Portal'); }} style={{ cursor: 'pointer' }}>
+                  <div className="portal-card-header">
+                    <div className="portal-card-icon"><Banknote style={{ width: '28px', height: '28px' }} /></div>
+                    <span className="portal-card-badge">Salary Portal</span>
+                  </div>
+                  <h3 className="portal-card-title">Salary &amp; Allowances</h3>
+                  <p className="portal-card-desc">Record vehicle, petrol, bonus and other allowances given to agents, add new allowance types, and see what each agent has received.</p>
+                  <div className="portal-card-action">Enter System &rarr;</div>
+                </div>
+              )}
             </div>
 
             <button className="glass-btn glass-btn-secondary" style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '700', borderRadius: '12px', marginTop: '10px' }} onClick={handleLogout}>
@@ -3798,6 +3815,14 @@ export default function LendApp() {
         {token && user && view === 'pawn-dashboard' && user.role === 'admin' && user.pawn_access && (
           <PawnPortal
             orgName={orgSettings.org_name}
+            showToast={showToast}
+            onBack={canSwitchPortals(user) ? () => setView('portal') : null}
+          />
+        )}
+
+        {/* ----------------- SALARY PORTAL ----------------- */}
+        {token && user && view === 'salary-dashboard' && user.role === 'admin' && user.salary_access && (
+          <SalaryPortal
             showToast={showToast}
             onBack={canSwitchPortals(user) ? () => setView('portal') : null}
           />
@@ -5653,6 +5678,12 @@ export default function LendApp() {
                             Pawn Portal Access
                           </label>
                         )}
+                        {newUserForm.role === 'admin' && (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={!!newUserForm.salary_access} onChange={e => setNewUserForm(prev => ({ ...prev, salary_access: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }} />
+                            Salary Portal Access
+                          </label>
+                        )}
                       </div>
                       <button type="submit" className="glass-btn glass-btn-emerald" disabled={loading} style={{ alignSelf: 'flex-start', padding: '10px 24px' }}>
                         <ClipboardCheck className="icon" /> Create User
@@ -5710,6 +5741,7 @@ export default function LendApp() {
                                 <span style={{ color: u.finance_access !== false ? 'var(--accent-blue)' : 'var(--text-muted)', fontWeight: u.finance_access !== false ? '600' : '400' }}>Finance: {u.finance_access !== false ? 'Yes' : 'No'}</span>
                                 <span style={{ color: u.ticket_access !== false ? 'var(--accent-emerald)' : 'var(--text-muted)', fontWeight: u.ticket_access !== false ? '600' : '400' }}>Ticket: {u.ticket_access !== false ? 'Yes' : 'No'}</span>
                                 {u.role === 'admin' && <span style={{ color: u.pawn_access ? 'var(--accent-amber)' : 'var(--text-muted)', fontWeight: u.pawn_access ? '600' : '400' }}>Pawn: {u.pawn_access ? 'Yes' : 'No'}</span>}
+                                {u.role === 'admin' && <span style={{ color: u.salary_access ? 'var(--accent-blue)' : 'var(--text-muted)', fontWeight: u.salary_access ? '600' : '400' }}>Salary: {u.salary_access ? 'Yes' : 'No'}</span>}
                               </div>
                             </td>
                             <td>
@@ -5988,6 +6020,12 @@ export default function LendApp() {
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
                               <input type="checkbox" checked={!!editUserForm.pawn_access} onChange={e => setEditUserForm(prev => ({ ...prev, pawn_access: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-amber)' }} />
                               Pawn Portal Access
+                            </label>
+                          )}
+                          {editUserForm.role === 'admin' && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={!!editUserForm.salary_access} onChange={e => setEditUserForm(prev => ({ ...prev, salary_access: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }} />
+                              Salary Portal Access
                             </label>
                           )}
                         </div>
@@ -8599,7 +8637,7 @@ export default function LendApp() {
       )}
 
       {/* Sticky Bottom Navigation Bar (loan portal) */}
-      {token && user && view !== 'portal' && view !== 'pawn-dashboard' && view !== 'ticket-dashboard' && (
+      {token && user && view !== 'portal' && view !== 'pawn-dashboard' && view !== 'salary-dashboard' && view !== 'ticket-dashboard' && (
         <nav className="bottom-nav-bar animate-fade-in">
           {user.role === 'admin' && (
             <>

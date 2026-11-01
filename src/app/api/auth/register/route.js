@@ -9,7 +9,7 @@ import { logError } from '@/lib/logger.js';
 export async function POST(request) {
   try {
     const user = await requireAuth(request, ['admin']);
-    const { name, phone, password, role, email, gender, finance_access, ticket_access, pawn_access } = await request.json();
+    const { name, phone, password, role, email, gender, finance_access, ticket_access, pawn_access, salary_access } = await request.json();
 
     if (!name || !phone || !role) {
       return NextResponse.json({ message: 'Name, phone, and role are required.' }, { status: 400 });
@@ -71,7 +71,8 @@ export async function POST(request) {
       must_change_password: mustChangePassword,
       finance_access: finance_access !== undefined ? !!finance_access : true,
       ticket_access: ticket_access !== undefined ? !!ticket_access : true,
-      pawn_access: role === 'admin' && !!pawn_access
+      pawn_access: role === 'admin' && !!pawn_access,
+      salary_access: role === 'admin' && !!salary_access
     }).returning('id');
 
     await db('audit_logs').insert({

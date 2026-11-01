@@ -555,6 +555,44 @@ async function runIncrementalMigrations() {
   }
 
   // ---------------------------------------------------------------------
+  // Salary Portal: money the admin gives to agents (vehicle / petrol / bonus /
+  // additional allowance, plus any type the admin adds). Its own tables and
+  // access switch; nothing here touches the loan ledger.
+  // ---------------------------------------------------------------------
+  await addColumnIfMissing('users', 'salary_access', (t) => t.boolean('salary_access').notNullable().defaultTo(false));
+
+  if (!(await db.schema.hasTable('salary_types'))) {
+    await db.schema.createTable('salary_types', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.string('name', 80).notNullable();
+      table.boolean('is_active').notNullable().defaultTo(true);
+      table.integer('sort_order').notNullable().defaultTo(0);
+      table.timestamp('created_at').defaultTo(db.fn.now());
+    });
+    await db.raw('CREATE UNIQUE INDEX salary_types_name_lower_idx ON salary_types (lower(name))');
+    console.log("Migration: created table 'salary_types'.");
+  }
+  for (const [i, name] of ['Vehicle Allowance', 'Petrol Allowance', 'Bonus Allowance', 'Additional Allowance'].entries()) {
+    await db.raw('INSERT INTO salary_types (name, sort_order) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM salary_types WHERE lower(name) = lower(?))', [name, i, name]);
+  }
+
+  if (!(await db.schema.hasTable('salary_payments'))) {
+    await db.schema.createTable('salary_payments', (table) => {
+      table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.uuid('agent_id').notNullable().references('id').inTable('users').onDelete('RESTRICT');
+      table.uuid('type_id').notNullable().references('id').inTable('salary_types').onDelete('RESTRICT');
+      table.decimal('amount', 15, 2).notNullable();
+      table.date('paid_on').notNullable();
+      table.text('notes').nullable();
+      table.uuid('paid_by').references('id').inTable('users').onDelete('SET NULL');
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.index('agent_id');
+      table.index('paid_on');
+    });
+    console.log("Migration: created table 'salary_payments'.");
+  }
+
+  // ---------------------------------------------------------------------
   // Chit fund: each member has details (NIC, address, NIC photos, photo) and an
   // optional guarantor (NIC + phone). Separate tables so the member list never
   // carries the (large) base64 photos.
