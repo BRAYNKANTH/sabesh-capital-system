@@ -572,8 +572,13 @@ async function runIncrementalMigrations() {
     await db.raw('CREATE UNIQUE INDEX salary_types_name_lower_idx ON salary_types (lower(name))');
     console.log("Migration: created table 'salary_types'.");
   }
-  for (const [i, name] of ['Vehicle Allowance', 'Petrol Allowance', 'Bonus Allowance', 'Additional Allowance'].entries()) {
-    await db.raw('INSERT INTO salary_types (name, sort_order) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM salary_types WHERE lower(name) = lower(?))', [name, i, name]);
+  // 'salary' types are shown apart from allowances; types the admin adds are allowances.
+  await addColumnIfMissing('salary_types', 'kind', (t) => t.string('kind', 10).notNullable().defaultTo('allowance'));
+  for (const [name, kind, order] of [
+    ['Basic Salary', 'salary', -1], ['Vehicle Allowance', 'allowance', 0], ['Petrol Allowance', 'allowance', 1],
+    ['Bonus Allowance', 'allowance', 2], ['Additional Allowance', 'allowance', 3]
+  ]) {
+    await db.raw('INSERT INTO salary_types (name, kind, sort_order) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM salary_types WHERE lower(name) = lower(?))', [name, kind, order, name]);
   }
 
   if (!(await db.schema.hasTable('salary_payments'))) {
@@ -591,6 +596,11 @@ async function runIncrementalMigrations() {
     });
     console.log("Migration: created table 'salary_payments'.");
   }
+  // 'pending' = the agent spent their own money (e.g. petrol) and is owed it back;
+  // 'paid' = given to them. settled_on is the day it was actually paid.
+  await addColumnIfMissing('salary_payments', 'status', (t) => t.string('status', 10).notNullable().defaultTo('paid'));
+  await addColumnIfMissing('salary_payments', 'settled_on', (t) => t.date('settled_on').nullable());
+  await db.raw("UPDATE salary_payments SET settled_on = paid_on WHERE status = 'paid' AND settled_on IS NULL");
 
   // ---------------------------------------------------------------------
   // Chit fund: each member has details (NIC, address, NIC photos, photo) and an

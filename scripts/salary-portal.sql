@@ -14,10 +14,14 @@ CREATE TABLE IF NOT EXISTS salary_types (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS salary_types_name_lower_idx ON salary_types (lower(name));
 
-INSERT INTO salary_types (name, sort_order)
-SELECT v.name, v.sort_order FROM (VALUES
-  ('Vehicle Allowance', 0), ('Petrol Allowance', 1), ('Bonus Allowance', 2), ('Additional Allowance', 3)
-) AS v(name, sort_order)
+-- 'salary' types are shown apart from allowances; types the admin adds are allowances.
+ALTER TABLE salary_types ADD COLUMN IF NOT EXISTS kind varchar(10) NOT NULL DEFAULT 'allowance';
+
+INSERT INTO salary_types (name, kind, sort_order)
+SELECT v.name, v.kind, v.sort_order FROM (VALUES
+  ('Basic Salary', 'salary', -1), ('Vehicle Allowance', 'allowance', 0), ('Petrol Allowance', 'allowance', 1),
+  ('Bonus Allowance', 'allowance', 2), ('Additional Allowance', 'allowance', 3)
+) AS v(name, kind, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM salary_types t WHERE lower(t.name) = lower(v.name));
 
 CREATE TABLE IF NOT EXISTS salary_payments (
@@ -32,3 +36,9 @@ CREATE TABLE IF NOT EXISTS salary_payments (
 );
 CREATE INDEX IF NOT EXISTS salary_payments_agent_id_idx ON salary_payments (agent_id);
 CREATE INDEX IF NOT EXISTS salary_payments_paid_on_idx ON salary_payments (paid_on);
+
+-- 'pending' = the agent spent their own money (e.g. petrol) and is owed it back;
+-- 'paid' = given to them. settled_on is the day it was actually paid.
+ALTER TABLE salary_payments ADD COLUMN IF NOT EXISTS status varchar(10) NOT NULL DEFAULT 'paid';
+ALTER TABLE salary_payments ADD COLUMN IF NOT EXISTS settled_on date;
+UPDATE salary_payments SET settled_on = paid_on WHERE status = 'paid' AND settled_on IS NULL;
