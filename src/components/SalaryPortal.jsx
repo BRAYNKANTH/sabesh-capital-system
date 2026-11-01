@@ -2,320 +2,246 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/apiClient.js';
-import { ArrowLeft, Plus, Trash2, Wallet, Check } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Check, Plus, Undo2 } from 'lucide-react';
 
+const num = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const money = (n) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (d) => (d ? d.split('-').reverse().join('/') : '-');
-const todayStr = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Colombo' });
-const NEW_TYPE = '__new__';
+const fmtDate = (d) => (d ? d.split('-').reverse().join('/') : '');
+const thisMonth = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Colombo' }).slice(0, 7);
+const shiftMonth = (m, by) => {
+  const [y, mo] = m.split('-').map(Number);
+  const d = new Date(Date.UTC(y, mo - 1 + by, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+const monthLabel = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-const KINDS = [
-  { key: '', label: 'Salary + allowances' },
-  { key: 'salary', label: 'Salary only' },
-  { key: 'allowance', label: 'Allowances only' }
-];
-const STATUSES = [
-  { key: '', label: 'All' },
-  { key: 'pending', label: 'To pay back' },
-  { key: 'paid', label: 'Paid' }
-];
+const KIND_LABEL = { salary: 'Salary', allowance: 'Allowance', deduction: 'Deduction' };
+const KIND_COLOR = { salary: 'var(--accent-blue)', allowance: 'var(--accent-emerald)', deduction: 'var(--accent-rose)' };
 
-function Field({ id, label, children, hint }) {
+const netOf = (row, types) => types.reduce((s, t) => {
+  const v = row.items[t.id] || 0;
+  return s + (t.kind === 'deduction' ? -v : v);
+}, 0);
+
+const th = { padding: '10px 12px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-light)' };
+const td = { padding: '8px 12px', textAlign: 'right', fontSize: '14px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-light)' };
+const stickyLeft = { position: 'sticky', left: 0, background: 'var(--bg-secondary)', textAlign: 'left', zIndex: 1 };
+
+// A number cell you type into. Saves when you leave it (or press Enter), only if it changed.
+function Cell({ value, disabled, label, onSave }) {
+  const [draft, setDraft] = useState(value ? String(value) : '');
+  useEffect(() => { setDraft(value ? String(value) : ''); }, [value]);
+  const commit = () => {
+    const next = draft === '' ? 0 : parseFloat(draft);
+    if (Number.isNaN(next)) return setDraft(value ? String(value) : '');
+    if (next !== (value || 0)) onSave(next);
+  };
   return (
-    <div>
-      <label htmlFor={id} style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>{label}</label>
-      {children}
-      {hint && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{hint}</div>}
-    </div>
+    <input type="number" min="0" step="0.01" inputMode="decimal" className="glass-input" aria-label={label}
+      value={draft} placeholder="–" disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setDraft(value ? String(value) : ''); e.currentTarget.blur(); } }}
+      style={{ width: '110px', textAlign: 'right', padding: '6px 8px' }} />
   );
 }
-
-function Segmented({ label, options, value, onChange }) {
-  return (
-    <div role="group" aria-label={label} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-      {options.map((o) => (
-        <button key={o.key} type="button" aria-pressed={value === o.key}
-          className={`glass-btn ${value === o.key ? 'glass-btn-emerald' : 'glass-btn-secondary'}`}
-          style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => onChange(o.key)}>{o.label}</button>
-      ))}
-    </div>
-  );
-}
-
-const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' };
 
 export default function SalaryPortal({ showToast, onBack }) {
-  const [agents, setAgents] = useState([]);
-  const [types, setTypes] = useState([]);
-  const [data, setData] = useState(null);
+  const [month, setMonth] = useState(thisMonth());
+  const [sheet, setSheet] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [tab, setTab] = useState('records'); // records | agents
-  const [filters, setFilters] = useState({ month: todayStr().slice(0, 7), agent_id: '', type_id: '', kind: '', status: '' });
-  const [form, setForm] = useState({ agent_id: '', type_id: '', new_type_name: '', amount: '', paid_on: todayStr(), notes: '', status: 'paid' });
-  const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState(null);
-  const [formError, setFormError] = useState('');
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
-  const addingType = form.type_id === NEW_TYPE;
+  const [statusFilter, setStatusFilter] = useState('all'); // all | pending | paid
+  const [busy, setBusy] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [newCol, setNewCol] = useState({ name: '', kind: 'allowance' });
+  const [addingBusy, setAddingBusy] = useState(false);
 
-  const loadTypes = useCallback(async () => setTypes(await api.get('/salary/types')), []);
-
-  const loadRecords = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoadError('');
     try {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v) qs.set(k, v); });
-      setData(await api.get(`/salary/payments?${qs}`));
+      setSheet(await api.get(`/salary/sheet?month=${month}`));
     } catch (err) {
       setLoadError(err.message);
     }
-  }, [filters]);
+  }, [month]);
+  useEffect(() => { setSheet(null); load(); }, [load]);
 
-  useEffect(() => {
-    Promise.all([api.get('/users/agents'), loadTypes()])
-      .then(([a]) => setAgents(a))
-      .catch((err) => setLoadError(err.message));
-  }, [loadTypes]);
-  useEffect(() => { loadRecords(); }, [loadRecords]);
+  const replaceRow = (row) => setSheet((s) => ({ ...s, rows: s.rows.map((r) => (r.agent_id === row.agent_id ? row : r)) }));
 
-  const submit = async (e) => {
+  const saveCell = async (row, type, amount) => {
+    try {
+      const res = await api.put('/salary/sheet', { agent_id: row.agent_id, month, type_id: type.id, amount });
+      replaceRow(res.row);
+    } catch (err) {
+      showToast(err.message, 'error');
+      load(); // put the cell back to what is saved
+    }
+  };
+
+  const togglePaid = async (row, paid) => {
+    const text = paid
+      ? `Mark ${row.agent_name} as paid for ${monthLabel(month)}?\n\nNet ${money(netOf(row, sheet.types))}. The row will be locked.`
+      : `Undo Paid for ${row.agent_name}?\n\nThe row becomes editable again.`;
+    if (!window.confirm(text)) return;
+    setBusy(row.agent_id);
+    try {
+      const res = await api.patch('/salary/sheet', { agent_id: row.agent_id, month, paid });
+      replaceRow(res.row);
+      showToast(paid ? `${row.agent_name} marked as paid.` : 'Paid undone.');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addColumn = async (e) => {
     e.preventDefault();
-    setFormError('');
-    if (!form.agent_id) return setFormError('Choose the agent.');
-    if (!form.type_id) return setFormError('Choose a type, or pick "Add new type".');
-    if (addingType && !form.new_type_name.trim()) return setFormError('Type a name for the new type.');
-    setSaving(true);
+    if (!newCol.name.trim()) return;
+    setAddingBusy(true);
     try {
-      const res = await api.post('/salary/payments', {
-        agent_id: form.agent_id,
-        type_id: addingType ? undefined : form.type_id,
-        new_type_name: addingType ? form.new_type_name : undefined,
-        amount: form.amount,
-        paid_on: form.paid_on,
-        notes: form.notes,
-        status: form.status
-      });
-      showToast(res.message);
-      // Keep the agent, date and "how" for the next entry; clear what changes each time.
-      setForm((f) => ({ ...f, type_id: res.type_id, new_type_name: '', amount: '', notes: '' }));
-      await Promise.all([loadTypes(), loadRecords()]);
-    } catch (err) {
-      setFormError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const markPaid = async (p) => {
-    if (!window.confirm(`Mark as paid?\n\n${money(p.amount)} (${p.type_name}) to ${p.agent_name}`)) return;
-    setBusyId(p.id);
-    try {
-      const res = await api.patch(`/salary/payments/${p.id}`, {});
-      showToast(res.message);
-      loadRecords();
+      await api.post('/salary/types', newCol);
+      showToast(`Added "${newCol.name.trim()}".`);
+      setNewCol({ name: '', kind: 'allowance' });
+      setAdding(false);
+      await load();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
-      setBusyId(null);
+      setAddingBusy(false);
     }
   };
 
-  const remove = async (p) => {
-    if (!window.confirm(`Delete this record?\n\n${p.type_name} — ${money(p.amount)} for ${p.agent_name} on ${fmtDate(p.paid_on)}`)) return;
-    setBusyId(p.id);
-    try {
-      await api.delete(`/salary/payments/${p.id}`);
-      showToast('Record deleted.');
-      loadRecords();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  // Figures for the current filters.
-  const rows = data?.rows || [];
-  const sum = (pred) => rows.filter(pred).reduce((s, r) => s + Number(r.total), 0);
-  const totalPaid = sum((r) => r.status === 'paid');
-  const totalOwed = sum((r) => r.status === 'pending');
-  const byType = [...rows.reduce((m, r) => m.set(r.type_id, { name: r.type_name, paid: (m.get(r.type_id)?.paid || 0) + (r.status === 'paid' ? Number(r.total) : 0), owed: (m.get(r.type_id)?.owed || 0) + (r.status === 'pending' ? Number(r.total) : 0) }), new Map()).entries()];
-  const byAgent = [...rows.reduce((m, r) => {
-    const a = m.get(r.agent_id) || { id: r.agent_id, name: r.agent_name, salary: 0, allowance: 0, owed: 0, lines: [] };
-    if (r.status === 'paid') a[r.kind === 'salary' ? 'salary' : 'allowance'] += Number(r.total);
-    else a.owed += Number(r.total);
-    a.lines.push(r);
-    return m.set(r.agent_id, a);
-  }, new Map()).values()];
-
-  const filterTypes = filters.kind ? types.filter((t) => t.kind === filters.kind) : types;
+  const types = sheet?.types || [];
+  const rows = (sheet?.rows || []).filter((r) => statusFilter === 'all' || (statusFilter === 'paid' ? r.status === 'paid' : r.status !== 'paid'));
+  const colTotal = (t) => rows.reduce((s, r) => s + (r.items[t.id] || 0), 0);
+  const netTotal = rows.reduce((s, r) => s + netOf(r, types), 0);
+  const allRows = sheet?.rows || [];
+  const paidNet = allRows.filter((r) => r.status === 'paid').reduce((s, r) => s + netOf(r, types), 0);
+  const unpaidNet = allRows.filter((r) => r.status !== 'paid').reduce((s, r) => s + netOf(r, types), 0);
 
   return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {onBack && (
-          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px' }} onClick={onBack}>
-            <ArrowLeft className="icon" /> Main Selector
-          </button>
-        )}
-        <div>
-          <h2 style={{ fontSize: '28px', margin: 0 }}>Salary &amp; Allowances</h2>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Money given to agents, and money they spent that you owe them</span>
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {onBack && (
+            <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px' }} onClick={onBack}>
+              <ArrowLeft className="icon" /> Main Selector
+            </button>
+          )}
+          <div>
+            <h2 style={{ fontSize: '28px', margin: 0 }}>Monthly Salary Table</h2>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Tap a cell to type an amount. Press Paid when you give it.</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 10px' }} aria-label="Previous month" onClick={() => setMonth((m) => shiftMonth(m, -1))}><ChevronLeft className="icon" /></button>
+          <input type="month" className="glass-input" aria-label="Month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} style={{ width: '170px' }} />
+          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 10px' }} aria-label="Next month" onClick={() => setMonth((m) => shiftMonth(m, 1))}><ChevronRight className="icon" /></button>
         </div>
       </div>
 
       {loadError && <div role="alert" className="glass-card" style={{ borderLeft: '4px solid var(--accent-rose)', padding: '14px 18px' }}>Could not load: {loadError}</div>}
 
-      <form onSubmit={submit} className="glass-card" style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <h3 style={{ margin: 0, fontSize: '18px' }}>Add an entry</h3>
-        <Segmented label="How was it paid" value={form.status} onChange={(v) => set('status', v)} options={[
-          { key: 'paid', label: 'I gave the money' },
-          { key: 'pending', label: 'Agent spent their own — pay later' }
-        ]} />
-        {form.status === 'pending' && (
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            It is saved as <strong>To pay back</strong>. When you hand the money over, tap <strong>Mark paid</strong> on it.
-          </div>
-        )}
-        {formError && <div role="alert" style={{ color: 'var(--accent-rose)', fontSize: '14px' }}>{formError}</div>}
-        <div style={grid}>
-          <Field id="sal-agent" label="Agent *">
-            <select id="sal-agent" className="glass-input" value={form.agent_id} onChange={(e) => set('agent_id', e.target.value)}>
-              <option value="">Choose agent…</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </Field>
-          <Field id="sal-type" label="Type *">
-            <select id="sal-type" className="glass-input" value={form.type_id} onChange={(e) => set('type_id', e.target.value)}>
-              <option value="">Choose type…</option>
-              {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              <option value={NEW_TYPE}>+ Add new type…</option>
-            </select>
-          </Field>
-          {addingType && (
-            <Field id="sal-newtype" label="New type name *" hint="Saved so you can pick it next time.">
-              <input id="sal-newtype" className="glass-input" value={form.new_type_name} maxLength={80} autoFocus autoComplete="off"
-                placeholder="e.g. Phone Allowance" onChange={(e) => set('new_type_name', e.target.value)} />
-            </Field>
-          )}
-          <Field id="sal-amount" label="Amount (LKR) *">
-            <input id="sal-amount" className="glass-input" type="number" min="0.01" step="0.01" inputMode="decimal" required
-              value={form.amount} onChange={(e) => set('amount', e.target.value)} />
-          </Field>
-          <Field id="sal-date" label={form.status === 'pending' ? 'Date spent *' : 'Date given *'}>
-            <input id="sal-date" className="glass-input" type="date" required value={form.paid_on} onChange={(e) => set('paid_on', e.target.value)} />
-          </Field>
-        </div>
-        <Field id="sal-notes" label="Note">
-          <input id="sal-notes" className="glass-input" value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Optional, e.g. petrol for route visits" />
-        </Field>
-        <div>
-          <button type="submit" className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px' }} disabled={saving}>
-            <Plus className="icon" /> {saving ? 'Saving…' : form.status === 'pending' ? 'Save as to pay back' : 'Record'}
-          </button>
-        </div>
-      </form>
-
-      <section style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <Segmented label="Show" value={filters.kind} onChange={(v) => setFilters((f) => ({ ...f, kind: v, type_id: '' }))} options={KINDS} />
-        <Segmented label="Payment status" value={filters.status} onChange={(v) => setFilter('status', v)} options={STATUSES} />
-        <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Field id="sal-month" label="Month">
-            <input id="sal-month" className="glass-input" type="month" value={filters.month} onChange={(e) => setFilter('month', e.target.value)} />
-          </Field>
-          <Field id="sal-filter-agent" label="Agent">
-            <select id="sal-filter-agent" className="glass-input" value={filters.agent_id} onChange={(e) => setFilter('agent_id', e.target.value)}>
-              <option value="">All agents</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </Field>
-          <Field id="sal-filter-type" label="Type">
-            <select id="sal-filter-type" className="glass-input" value={filters.type_id} onChange={(e) => setFilter('type_id', e.target.value)}>
-              <option value="">All types</option>
-              {filterTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </Field>
-          {filters.month && (
-            <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '10px 14px', fontSize: '13px' }} onClick={() => setFilter('month', '')}>All time</button>
-          )}
-        </div>
-      </section>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-        <div className="kpi-card kpi-card-emerald"><span className="kpi-lbl">Paid</span><h3 className="kpi-val">{data ? money(totalPaid) : '…'}</h3></div>
-        <div className="kpi-card kpi-card-rose"><span className="kpi-lbl">To pay back</span><h3 className="kpi-val">{data ? money(totalOwed) : '…'}</h3><span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Spent by agents, not yet paid</span></div>
-        {byType.map(([id, t]) => (
-          <div key={id} className="kpi-card"><span className="kpi-lbl">{t.name}</span><h3 className="kpi-val">{money(t.paid)}</h3>
-            {t.owed > 0 && <span style={{ fontSize: '12px', color: 'var(--accent-rose)' }}>+ {money(t.owed)} to pay back</span>}</div>
-        ))}
+        <div className="kpi-card kpi-card-emerald"><span className="kpi-lbl">Paid ({monthLabel(month)})</span><h3 className="kpi-val">{sheet ? money(paidNet) : '…'}</h3></div>
+        <div className="kpi-card kpi-card-rose"><span className="kpi-lbl">Not paid yet</span><h3 className="kpi-val">{sheet ? money(unpaidNet) : '…'}</h3></div>
       </div>
 
-      <Segmented label="View" value={tab} onChange={setTab} options={[{ key: 'records', label: 'All records' }, { key: 'agents', label: 'By agent' }]} />
-
-      {data === null ? (
-        <div className="glass-card" style={{ padding: '24px' }}>Loading…</div>
-      ) : tab === 'agents' ? (
-        byAgent.length === 0 ? (
-          <div className="glass-card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>No records match these filters.</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-            {byAgent.map((a) => (
-              <div key={a.id} className="glass-card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <strong style={{ fontSize: '17px' }}>{a.name}</strong>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}><span>Salary</span><strong>{money(a.salary)}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}><span>Allowances</span><strong>{money(a.allowance)}</strong></div>
-                {a.owed > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: 'var(--accent-rose)' }}><span>To pay back</span><strong>{money(a.owed)}</strong></div>}
-                <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {a.lines.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      <span>{l.type_name}{l.status === 'pending' ? ' (to pay back)' : ''}</span><span>{money(l.total)}</span>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }}
-                  onClick={() => { setFilter('agent_id', a.id); setTab('records'); }}>See records</button>
-              </div>
-            ))}
-          </div>
-        )
-      ) : data.payments.length === 0 ? (
-        <div className="glass-card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          Nothing matches these filters. Use "Add an entry" above to record one.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {data.payments.map((p) => (
-            <div key={p.id} className="glass-card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Wallet className="icon" aria-hidden="true" />
-                  <strong>{p.agent_name}</strong>
-                  <span className="badge badge-active">{p.type_name}</span>
-                  {p.status === 'pending'
-                    ? <span className="badge badge-pending">To pay back</span>
-                    : <span className="badge badge-paid">Paid{p.settled_on && p.settled_on !== p.paid_on ? ` ${fmtDate(p.settled_on)}` : ''}</span>}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  {p.status === 'pending' ? 'Spent' : 'Given'} {fmtDate(p.paid_on)}{p.notes ? ` · ${p.notes}` : ''}
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <strong>{money(p.amount)}</strong>
-                {p.status === 'pending' && (
-                  <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '8px 14px', fontSize: '13px' }} disabled={busyId === p.id} onClick={() => markPaid(p)}>
-                    <Check className="icon" /> Mark paid
-                  </button>
-                )}
-                <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 10px' }} disabled={busyId === p.id}
-                  aria-label={`Delete ${p.type_name} record for ${p.agent_name}`} onClick={() => remove(p)}>
-                  <Trash2 className="icon" />
-                </button>
-              </div>
-            </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div role="group" aria-label="Filter rows" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[['all', 'All'], ['pending', 'Not paid'], ['paid', 'Paid']].map(([k, l]) => (
+            <button key={k} type="button" aria-pressed={statusFilter === k}
+              className={`glass-btn ${statusFilter === k ? 'glass-btn-emerald' : 'glass-btn-secondary'}`}
+              style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => setStatusFilter(k)}>{l}</button>
           ))}
         </div>
+        {!adding ? (
+          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => setAdding(true)}>
+            <Plus className="icon" /> Add column
+          </button>
+        ) : (
+          <form onSubmit={addColumn} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input className="glass-input" aria-label="New column name" placeholder="e.g. Phone Allowance" maxLength={80} autoFocus
+              value={newCol.name} onChange={(e) => setNewCol((c) => ({ ...c, name: e.target.value }))} style={{ width: '200px' }} />
+            <select className="glass-input" aria-label="Column type" value={newCol.kind} onChange={(e) => setNewCol((c) => ({ ...c, kind: e.target.value }))}>
+              <option value="allowance">Allowance (adds)</option>
+              <option value="deduction">Deduction (takes off)</option>
+            </select>
+            <button type="submit" className="glass-btn glass-btn-emerald" style={{ padding: '8px 14px', fontSize: '13px' }} disabled={addingBusy || !newCol.name.trim()}>Add</button>
+            <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => setAdding(false)}>Cancel</button>
+          </form>
+        )}
+      </div>
+
+      {sheet === null ? (
+        <div className="glass-card" style={{ padding: '24px' }}>Loading…</div>
+      ) : sheet.rows.length === 0 ? (
+        <div className="glass-card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+          No agents yet. Add agents in Admin Tools and they will appear here.
+        </div>
+      ) : (
+        <div className="glass-card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, ...stickyLeft }}>Employee</th>
+                {types.map((t) => (
+                  <th key={t.id} style={th}>
+                    {t.name}
+                    <div style={{ fontSize: '10px', fontWeight: 600, color: KIND_COLOR[t.kind] }}>{KIND_LABEL[t.kind]}</div>
+                  </th>
+                ))}
+                <th style={th}>Net Salary</th>
+                <th style={th}>Paid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const paid = r.status === 'paid';
+                const net = netOf(r, types);
+                const hasAny = Object.keys(r.items).length > 0;
+                return (
+                  <tr key={r.agent_id}>
+                    <td style={{ ...td, ...stickyLeft, fontWeight: 600 }}>{r.agent_name}</td>
+                    {types.map((t) => (
+                      <td key={t.id} style={td}>
+                        <Cell value={r.items[t.id]} disabled={paid} label={`${t.name} for ${r.agent_name}`} onSave={(v) => saveCell(r, t, v)} />
+                      </td>
+                    ))}
+                    <td style={{ ...td, fontWeight: 700 }}>{hasAny ? num(net) : '–'}</td>
+                    <td style={td}>
+                      {paid ? (
+                        <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                          <span className="badge badge-paid">Paid {fmtDate(r.paid_on)}</span>
+                          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} disabled={busy === r.agent_id}
+                            aria-label={`Undo paid for ${r.agent_name}`} onClick={() => togglePaid(r, false)}><Undo2 className="icon" /> Undo</button>
+                        </span>
+                      ) : (
+                        <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '8px 14px', fontSize: '13px' }}
+                          disabled={!hasAny || busy === r.agent_id} aria-label={`Mark ${r.agent_name} as paid`} onClick={() => togglePaid(r, true)}>
+                          <Check className="icon" /> Paid
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr><td colSpan={types.length + 3} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>No rows match this filter.</td></tr>
+              )}
+              <tr>
+                <td style={{ ...td, ...stickyLeft, fontWeight: 700, borderBottom: 'none' }}>Total</td>
+                {types.map((t) => <td key={t.id} style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(colTotal(t))}</td>)}
+                <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(netTotal)}</td>
+                <td style={{ ...td, borderBottom: 'none' }} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
       )}
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+        Net Salary = salary + allowances − deductions. For money an agent spent themselves (for example petrol), type it in their row and press Paid when you give it back.
+      </div>
     </div>
   );
 }

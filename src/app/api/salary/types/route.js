@@ -14,8 +14,8 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const user = await requireSalaryAdmin(request);
-    const { name } = await request.json();
-    return NextResponse.json(await createType(name, user.id), { status: 201 });
+    const { name, kind } = await request.json();
+    return NextResponse.json(await createType(name, kind, user.id), { status: 201 });
   } catch (error) {
     return salaryErrorResponse(error, 'Salary type create error', request);
   }
