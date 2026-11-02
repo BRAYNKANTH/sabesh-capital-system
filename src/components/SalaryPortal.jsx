@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/apiClient.js';
-import { ArrowLeft, ChevronLeft, ChevronRight, Check, Landmark, Plus, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Landmark, Plus, Trash2 } from 'lucide-react';
 
 const num = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const money = (n) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -21,7 +21,7 @@ const NEW_TYPE = '__new__';
 const th = { padding: '10px 12px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-secondary)' };
 const td = { padding: '8px 12px', textAlign: 'right', fontSize: '14px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border-light)', verticalAlign: 'top' };
 const left = { textAlign: 'left' };
-// Sticky edges keep the employee, status, Net and Paid button in view while the middle scrolls.
+// Sticky edges keep the employee, Net and Delete button in view while the middle scrolls.
 const stickyLeft = { position: 'sticky', left: 0, zIndex: 1, background: 'var(--bg-secondary)', boxShadow: '1px 0 0 var(--border-light)' };
 const stickyRight = { position: 'sticky', right: 0, zIndex: 1, background: 'var(--bg-secondary)', boxShadow: '-1px 0 0 var(--border-light)' };
 const tabular = { fontVariantNumeric: 'tabular-nums' };
@@ -96,27 +96,11 @@ function TypeSelect({ value, types, usedIds = [], disabled, label, onPick, onCre
   );
 }
 
-// The Allowances cell. Paid rows show plain text; open rows show one editable line per allowance
-// (type + amount), "+ Add allowance" for another, and the running total underneath.
-function AllowanceLines({ entry, types, locked, who, onAdd, onChange, onRemove, onCreateType }) {
+// The Allowances cell: one editable line per allowance (type + amount), "+ Add allowance" for
+// another, and the running total underneath.
+function AllowanceLines({ entry, types, who, onAdd, onChange, onRemove, onCreateType }) {
   const [adding, setAdding] = useState(false);
   const used = entry.allowances.map((l) => l.type_id);
-
-  if (locked) {
-    if (!entry.allowances.length) return <span>–</span>;
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '220px' }}>
-        {entry.allowances.map((l) => (
-          <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
-            <span>{l.type_name}</span><span style={tabular}>{num(l.amount)}</span>
-          </div>
-        ))}
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', fontWeight: 700, borderTop: '1px solid var(--border-light)', paddingTop: '4px' }}>
-          <span>Total allowances</span><span style={tabular}>{num(entry.allowance_total)}</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
@@ -273,7 +257,7 @@ function EmployeeDetailsDialog({ employees, startId, ready, onClose, onSaved, sh
 
 export default function SalaryPortal({ showToast, onBack }) {
   const [month, setMonth] = useState(todayStr().slice(0, 7));
-  const [filters, setFilters] = useState({ agent_id: '', type_id: '', status: '' });
+  const [filters, setFilters] = useState({ agent_id: '', type_id: '' });
   const [agents, setAgents] = useState([]); // everyone who can be paid, with their saved details
   const [detailsReady, setDetailsReady] = useState(true);
   const [detailsFor, setDetailsFor] = useState(null); // null = closed, '' = open with no one chosen, id = open for that employee
@@ -386,23 +370,6 @@ export default function SalaryPortal({ showToast, onBack }) {
     }
   };
 
-  const togglePaid = async (e, paid) => {
-    const text = paid
-      ? `Mark ${e.agent_name} as paid?\n\nNet ${money(e.net)}. The row will be locked.`
-      : `Undo Paid for ${e.agent_name}?\n\nThe row becomes editable again.`;
-    if (!window.confirm(text)) return;
-    setBusy(e.id);
-    try {
-      const res = await track(() => api.patch(`/salary/entries/${e.id}`, { paid }));
-      replace(res.entry);
-      showToast(paid ? `${e.agent_name} marked as paid.` : 'Paid undone.');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const remove = async (e) => {
     if (!window.confirm(`Delete this row?\n\n${e.agent_name} — ${fmtDate(e.entry_date)} — net ${money(e.net)}`)) return;
     setBusy(e.id);
@@ -418,8 +385,7 @@ export default function SalaryPortal({ showToast, onBack }) {
   };
 
   const sum = (k, list = entries) => list.reduce((s, e) => s + (+e[k] || 0), 0);
-  const paidNet = entries.filter((e) => e.status === 'paid').reduce((s, e) => s + e.net, 0);
-  const unpaidNet = entries.filter((e) => e.status !== 'paid').reduce((s, e) => s + e.net, 0);
+  const totalNet = sum('net');
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
 
   // Rows grouped by employee, each with its own totals.
@@ -430,83 +396,60 @@ export default function SalaryPortal({ showToast, onBack }) {
   }, new Map()).values()].sort((a, b) => a.name.localeCompare(b.name)).map((g) => ({
     ...g,
     basic: sum('basic_salary', g.rows), allowance: sum('allowance_total', g.rows), advance: sum('advance', g.rows),
-    deduction: sum('deduction', g.rows), net: sum('net', g.rows),
-    paid: g.rows.filter((r) => r.status === 'paid').reduce((s, r) => s + r.net, 0),
-    unpaid: g.rows.filter((r) => r.status !== 'paid').reduce((s, r) => s + r.net, 0)
+    deduction: sum('deduction', g.rows), net: sum('net', g.rows)
   }));
 
-  // Net amount and what can be done with the row (Paid / Undo / delete / cancel).
-  const statusBlock = (rec, { isDraft, locked, who, align }) => (
+  // Net amount and what can be done with the row (delete / cancel a new row).
+  const statusBlock = (rec, { isDraft, who, align }) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: align === 'left' ? 'flex-start' : 'flex-end' }}>
       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Net Salary</div>
       <div style={{ fontSize: '18px', fontWeight: 800, ...tabular }}>{netOf(rec) ? num(netOf(rec)) : '–'}</div>
       {isDraft ? (
         <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }} onClick={() => setDraft(null)}>Cancel</button>
-      ) : locked ? (
-        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }} disabled={busy === rec.id}
-          aria-label={`Undo paid for ${who}`} onClick={() => togglePaid(rec, false)}><Undo2 className="icon" /> Undo</button>
       ) : (
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '10px 16px', fontSize: '13px' }}
-            disabled={!(rec.net > 0) || busy === rec.id} aria-label={`Mark ${who} as paid`} onClick={() => togglePaid(rec, true)}>
-            <Check className="icon" /> Paid
-          </button>
-          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '10px 12px', marginLeft: '6px' }} disabled={busy === rec.id}
-            aria-label={`Delete row for ${who}`} onClick={() => remove(rec)}><Trash2 className="icon" /></button>
-        </div>
+        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '8px 12px', fontSize: '13px' }} disabled={busy === rec.id}
+          aria-label={`Delete row for ${who}`} onClick={() => remove(rec)}><Trash2 className="icon" /> Delete</button>
       )}
     </div>
   );
 
-  // One row, saved or draft. `rec` is the data; a paid row is locked and shown as plain text.
+  // One row, saved or draft. Every cell is editable; changes save as you go.
   const row = (rec, { isDraft }) => {
-    const locked = !isDraft && rec.status === 'paid';
     const edit = (patch) => (isDraft ? patchDraft(patch) : patchEntry(rec, patch));
     const who = rec.agent_name || 'new row';
-    const text = (v) => <span style={tabular}>{v ? num(v) : '–'}</span>;
     return (
       <tr key={isDraft ? 'draft' : rec.id}>
-        <td style={{ ...td, ...left, ...(compact ? {} : stickyLeft), borderLeft: `4px solid ${locked ? 'var(--accent-emerald)' : 'transparent'}`, minWidth: '190px' }}>
-          {locked ? (
-            <strong style={{ fontSize: '15px' }}>{rec.agent_name}</strong>
-          ) : (
-            <select className="glass-input" aria-label="Employee name" value={rec.agent_id || ''}
-              onChange={(e) => e.target.value && edit({ agent_id: e.target.value })} style={{ width: '170px', padding: '6px 8px' }}>
-              <option value="">Choose employee…</option>
-              {agents.filter((a) => !isDraft || !entries.some((e) => e.agent_id === a.id && e.status !== 'paid')).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          )}
-          <div style={{ marginTop: '6px' }}>
-            {isDraft ? <span className="badge badge-pending">New row</span>
-              : locked ? <span className="badge badge-paid">Paid {fmtDate(rec.paid_on)}</span>
-              : <span className="badge badge-pending">Not paid</span>}
-          </div>
+        <td style={{ ...td, ...left, ...(compact ? {} : stickyLeft), minWidth: '190px' }}>
+          <select className="glass-input" aria-label="Employee name" value={rec.agent_id || ''}
+            onChange={(e) => e.target.value && edit({ agent_id: e.target.value })} style={{ width: '170px', padding: '6px 8px' }}>
+            <option value="">Choose employee…</option>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          {isDraft && <div style={{ marginTop: '6px' }}><span className="badge badge-pending">New row</span></div>}
           {rec.agent_id && (
             <div style={{ marginTop: '6px' }}>
               <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }}
                 aria-label={`Employee details for ${who}`} onClick={() => setDetailsFor(rec.agent_id)}><Landmark className="icon" /> Details</button>
             </div>
           )}
-          {compact && <div style={{ marginTop: '10px' }}>{statusBlock(rec, { isDraft, locked, who, align: 'left' })}</div>}
+          {compact && <div style={{ marginTop: '10px' }}>{statusBlock(rec, { isDraft, who, align: 'left' })}</div>}
         </td>
         <td style={{ ...td, ...left }}>
-          {locked ? <span>{fmtDate(rec.entry_date)}</span> : (
-            <input type="date" className="glass-input" aria-label={`Date for ${who}`} value={rec.entry_date || ''}
-              onChange={(e) => e.target.value && edit({ entry_date: e.target.value })} style={{ padding: '6px 8px' }} />
-          )}
+          <input type="date" className="glass-input" aria-label={`Date for ${who}`} value={rec.entry_date || ''}
+            onChange={(e) => e.target.value && edit({ entry_date: e.target.value })} style={{ padding: '6px 8px' }} />
         </td>
-        <td style={td}>{locked ? text(rec.basic_salary) : <MoneyInput value={rec.basic_salary} label={`Basic salary for ${who}`} onSave={(v) => edit({ basic_salary: v })} />}</td>
+        <td style={td}><MoneyInput value={rec.basic_salary} label={`Basic salary for ${who}`} onSave={(v) => edit({ basic_salary: v })} /></td>
         <td style={td}>
           {isDraft ? (
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Choose the employee, then add allowances</span>
           ) : (
-            <AllowanceLines entry={rec} types={types} locked={locked} who={who}
+            <AllowanceLines entry={rec} types={types} who={who}
               onAdd={(typeId) => addLine(rec, typeId)} onChange={(l, patch) => changeLine(rec, l, patch)} onRemove={(l) => removeLine(rec, l)} onCreateType={addTypeByName} />
           )}
         </td>
-        <td style={td}>{locked ? text(rec.advance) : <MoneyInput value={rec.advance} label={`Advance for ${who}`} onSave={(v) => edit({ advance: v })} />}</td>
-        <td style={td}>{locked ? text(rec.deduction) : <MoneyInput value={rec.deduction} label={`Deductions for ${who}`} onSave={(v) => edit({ deduction: v })} />}</td>
-        {!compact && <td style={{ ...td, ...stickyRight }}>{statusBlock(rec, { isDraft, locked, who, align: 'right' })}</td>}
+        <td style={td}><MoneyInput value={rec.advance} label={`Advance for ${who}`} onSave={(v) => edit({ advance: v })} /></td>
+        <td style={td}><MoneyInput value={rec.deduction} label={`Deductions for ${who}`} onSave={(v) => edit({ deduction: v })} /></td>
+        {!compact && <td style={{ ...td, ...stickyRight }}>{statusBlock(rec, { isDraft, who, align: 'right' })}</td>}
       </tr>
     );
   };
@@ -516,7 +459,6 @@ export default function SalaryPortal({ showToast, onBack }) {
     <tr key={`sub-${g.id}`} style={{ background: 'var(--bg-tertiary)' }}>
       <td style={{ ...td, ...left, ...(compact ? {} : { ...stickyLeft, background: 'var(--bg-tertiary)' }), fontWeight: 700 }}>
         {g.name} — total
-        <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>Paid {num(g.paid)} · Not paid {num(g.unpaid)}</div>
       </td>
       <td style={td} />
       <td style={{ ...td, fontWeight: 700, ...tabular }}>{num(g.basic)}</td>
@@ -541,7 +483,7 @@ export default function SalaryPortal({ showToast, onBack }) {
           )}
           <div>
             <h2 style={{ fontSize: '28px', margin: 0 }}>Monthly Salary Table</h2>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>One row per employee: add as many allowances as needed and the total updates. Press Paid when you give it.</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Add a row when you give money. Add as many allowances as needed and the total updates.</span>
           </div>
         </div>
         <span role="status" aria-live="polite" style={{ fontSize: '13px', fontWeight: 600, minHeight: '20px', color: save === 'error' ? 'var(--accent-rose)' : 'var(--text-secondary)' }}>{saveText}</span>
@@ -554,7 +496,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         </div>
       )}
 
-      {/* Header: month, employee, allowance type and status selectors */}
+      {/* Header: month, employee and allowance type selectors */}
       <section className="glass-card" style={{ padding: '14px 18px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
           <label htmlFor="sal-month" style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>Month</label>
@@ -578,14 +520,6 @@ export default function SalaryPortal({ showToast, onBack }) {
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
-        <div>
-          <label htmlFor="sal-f-status" style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>Status</label>
-          <select id="sal-f-status" className="glass-input" value={filters.status} onChange={(e) => setFilter('status', e.target.value)}>
-            <option value="">All</option>
-            <option value="pending">Not paid</option>
-            <option value="paid">Paid</option>
-          </select>
-        </div>
         <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '10px 14px', fontSize: '13px' }} onClick={() => setMonth('')} disabled={!month}>All time</button>
         <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '10px 14px', fontSize: '13px', marginLeft: 'auto' }} onClick={() => setDetailsFor('')}>
           <Landmark className="icon" /> Employee details
@@ -593,8 +527,7 @@ export default function SalaryPortal({ showToast, onBack }) {
       </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-        <div className="kpi-card kpi-card-emerald"><span className="kpi-lbl">Paid{month ? ` (${monthLabel(month)})` : ''}</span><h3 className="kpi-val">{data ? money(paidNet) : '…'}</h3></div>
-        <div className="kpi-card kpi-card-rose"><span className="kpi-lbl">Not paid yet</span><h3 className="kpi-val">{data ? money(unpaidNet) : '…'}</h3></div>
+        <div className="kpi-card kpi-card-emerald"><span className="kpi-lbl">Total given{month ? ` (${monthLabel(month)})` : ''}</span><h3 className="kpi-val">{data ? money(totalNet) : '…'}</h3></div>
       </div>
 
       {/* Totals for each employee, across all their rows */}
@@ -602,7 +535,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         <details open className="glass-card" style={{ padding: '14px 18px' }}>
           <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '16px' }}>Totals by employee ({groups.length})</summary>
           <div style={{ overflowX: 'auto', marginTop: '10px' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '860px' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '720px' }}>
               <caption style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Totals for each employee</caption>
               <thead>
                 <tr>
@@ -612,8 +545,6 @@ export default function SalaryPortal({ showToast, onBack }) {
                   <th scope="col" style={th}>Advance</th>
                   <th scope="col" style={th}>Deductions</th>
                   <th scope="col" style={th}>Net total</th>
-                  <th scope="col" style={th}>Paid</th>
-                  <th scope="col" style={th}>Not paid</th>
                   <th scope="col" style={{ ...th, ...left }}>Bank details</th>
                 </tr>
               </thead>
@@ -626,8 +557,6 @@ export default function SalaryPortal({ showToast, onBack }) {
                     <td style={{ ...td, ...tabular }}>{num(g.advance)}</td>
                     <td style={{ ...td, ...tabular }}>{num(g.deduction)}</td>
                     <td style={{ ...td, fontWeight: 700, ...tabular }}>{num(g.net)}</td>
-                    <td style={{ ...td, ...tabular }}>{num(g.paid)}</td>
-                    <td style={{ ...td, ...tabular, color: g.unpaid > 0 ? 'var(--accent-rose)' : undefined, fontWeight: g.unpaid > 0 ? 700 : 400 }}>{num(g.unpaid)}</td>
                     <td style={{ ...td, ...left, whiteSpace: 'normal' }}>
                       {(() => {
                         const d = employeeById.get(g.id);
@@ -665,7 +594,7 @@ export default function SalaryPortal({ showToast, onBack }) {
                 <th scope="col" style={th}>Allowances</th>
                 <th scope="col" style={th}>Advance</th>
                 <th scope="col" style={th}>Deductions</th>
-                {!compact && <th scope="col" style={{ ...th, ...stickyRight }}>Net Salary / Paid</th>}
+                {!compact && <th scope="col" style={{ ...th, ...stickyRight }}>Net Salary</th>}
               </tr>
             </thead>
             <tbody>
@@ -707,7 +636,7 @@ export default function SalaryPortal({ showToast, onBack }) {
           onClose={() => setDetailsFor(null)} onSaved={savedDetails} />
       )}
       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        Net Salary = basic salary + allowances + advance − deductions. To recover an advance later, type it in that employee's Deductions. A new row is saved as soon as you choose the employee. For money an agent spent themselves (for example petrol), add that allowance on their row and press Paid when you give it back.
+        Net Salary = basic salary + allowances + advance − deductions. To recover an advance later, type it in that employee's Deductions. A new row is saved as soon as you choose the employee. If you give an employee money more than once in a month, add another row; the totals by employee add them up.
       </div>
     </div>
   );

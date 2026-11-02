@@ -78,3 +78,6 @@ CREATE TABLE IF NOT EXISTS salary_employee_details (
   account_number varchar(40),
   updated_at timestamptz DEFAULT now()
 );
+
+-- Rows are entered when the money is given, so every row counts as given (no separate Paid step).
+UPDATE salary_entries SET status = 'paid', paid_on = COALESCE(paid_on, entry_date) WHERE status <> 'paid';

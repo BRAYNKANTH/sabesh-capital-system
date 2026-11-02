@@ -608,6 +608,8 @@ async function runIncrementalMigrations() {
     });
     console.log("Migration: created table 'salary_entries'.");
   }
+  // Rows are entered when the money is given, so every row counts as given (no separate Paid step).
+  await db.raw("UPDATE salary_entries SET status = 'paid', paid_on = COALESCE(paid_on, entry_date) WHERE status <> 'paid'");
   // Each employee's default basic salary (fills their first row of a month) and bank details.
   if (!(await db.schema.hasTable('salary_employee_details'))) {
     await db.schema.createTable('salary_employee_details', (table) => {

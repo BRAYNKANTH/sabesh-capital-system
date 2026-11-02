@@ -59,8 +59,8 @@ export async function createType(name, actorId) {
 
 const entryQuery = (k) => k('salary_entries as e')
   .join('users as u', 'u.id', 'e.agent_id')
-  .select('e.id', 'e.agent_id', 'u.name as agent_name', 'e.status', 'e.note',
-    k.raw("to_char(e.entry_date, 'YYYY-MM-DD') as entry_date"), k.raw("to_char(e.paid_on, 'YYYY-MM-DD') as paid_on"),
+  .select('e.id', 'e.agent_id', 'u.name as agent_name', 'e.note',
+    k.raw("to_char(e.entry_date, 'YYYY-MM-DD') as entry_date"),
     k.raw('e.basic_salary::float8 as basic_salary'), k.raw('e.advance::float8 as advance'), k.raw('e.deduction::float8 as deduction'));
 
 // Adds each row's allowance lines, their total, and the net salary.
@@ -85,9 +85,8 @@ async function getEntry(k, id) {
 
 // Entries for a month (blank = all time), oldest first, optionally narrowed.
 // Narrowing by allowance type keeps the rows that have that allowance.
-export async function listEntries({ month, agentId, typeId, status }) {
+export async function listEntries({ month, agentId, typeId }) {
   if (month && !MONTH_RE.test(month)) throw new SalaryError(400, 'Month must look like 2026-11.');
-  if (status && !['pending', 'paid'].includes(status)) throw new SalaryError(400, 'Status must be pending or paid.');
   const q = entryQuery(db);
   if (month) {
     const [from, to] = monthBounds(month);
@@ -95,7 +94,6 @@ export async function listEntries({ month, agentId, typeId, status }) {
   }
   if (agentId) q.where('e.agent_id', agentId);
   if (typeId) q.whereIn('e.id', db('salary_entry_allowances').select('entry_id').where({ type_id: typeId }));
-  if (status) q.where('e.status', status);
   const [entries, types] = await Promise.all([
     q.orderBy([{ column: 'e.entry_date', order: 'asc' }, { column: 'e.created_at', order: 'asc' }]).limit(1000),
     listTypes()
@@ -113,15 +111,6 @@ async function requireType(typeId) {
   const t = typeId ? await db('salary_types').where({ id: typeId, is_active: true, kind: 'allowance' }).first('id', 'name') : null;
   if (!t) throw new SalaryError(400, 'Choose an allowance type.');
   return t;
-}
-
-// One open (unpaid) row per employee per month: further allowances go on that row.
-// Once a row is marked Paid the employee can get a new row (another payment, an advance...).
-async function assertOneRowPerMonth(k, agent, entryDate, exceptId) {
-  const [from, to] = monthBounds(entryDate.slice(0, 7));
-  const q = k('salary_entries').where('agent_id', agent.id).where('status', 'pending').where('entry_date', '>=', from).where('entry_date', '<', to);
-  if (exceptId) q.whereNot('id', exceptId);
-  if (await q.first('id')) throw new SalaryError(409, `${agent.name} already has an unpaid row for ${entryDate.slice(0, 7)}. Add to that row, or mark it Paid first.`);
 }
 
 // The employee's saved basic salary, used to fill a new row's Basic Salary when none is
@@ -147,9 +136,11 @@ export async function createEntry(input, actorId) {
     advance: money(input.advance, 'advance'),
     deduction: money(input.deduction, 'deduction'),
     note: typeof input.note === 'string' && input.note.trim() ? input.note.trim() : null,
+    // A row is entered when the money is given, so it is recorded as given straight away.
+    status: 'paid',
+    paid_on: entryDate,
     created_by: actorId
   };
-  await assertOneRowPerMonth(db, agent, row.entry_date);
   const [created] = await db('salary_entries').insert(row).returning('id');
   const id = created.id ?? created;
   await db('audit_logs').insert({
@@ -159,11 +150,10 @@ export async function createEntry(input, actorId) {
   return getEntry(db, id);
 }
 
-// Locks the row for editing, or refuses when it is already paid.
+// Locks the row for the change that follows.
 async function editableEntry(trx, id) {
   const cur = await trx('salary_entries').where({ id }).first().forUpdate();
   if (!cur) throw new SalaryError(404, 'That row was not found.');
-  if (cur.status === 'paid') throw new SalaryError(409, 'This row is marked Paid. Press "Undo" on it before changing it.');
   return cur;
 }
 
@@ -186,10 +176,6 @@ export async function updateEntry(id, patch, actorId) {
     }
     if (!changes.length) return getEntry(trx, id);
 
-    if (updates.agent_id || updates.entry_date) {
-      const agent = await trx('users').where({ id: updates.agent_id || cur.agent_id }).first('id', 'name');
-      await assertOneRowPerMonth(trx, agent, updates.entry_date || new Date(cur.entry_date).toLocaleDateString('sv-SE'), id);
-    }
     updates.updated_at = trx.fn.now();
     await trx('salary_entries').where({ id }).update(updates);
     await trx('audit_logs').insert({ actor_id: actorId, action_type: 'SALARY_ENTRY_EDITED', description: `Salary row ${id} changed: ${changes.join(', ')}.` });
@@ -254,29 +240,11 @@ export async function deleteAllowance(entryId, lineId, actorId) {
   });
 }
 
-// --- Paid / delete ------------------------------------------------------------
-
-// Marks a row paid (locks it) or undoes that.
-export async function setPaid(id, paid, actorId) {
-  return db.transaction(async (trx) => {
-    const cur = await getEntry(trx, id);
-    if (!cur) throw new SalaryError(404, 'That row was not found.');
-    const wanted = paid ? 'paid' : 'pending';
-    if (cur.status === wanted) return cur;
-    if (paid && !(cur.net > 0)) throw new SalaryError(400, 'Enter an amount first.');
-    await trx('salary_entries').where({ id }).update({ status: wanted, paid_on: paid ? today() : null, updated_at: trx.fn.now() });
-    await trx('audit_logs').insert({
-      actor_id: actorId, action_type: paid ? 'SALARY_PAID' : 'SALARY_UNPAID',
-      description: paid ? `Marked ${cur.agent_name}'s ${cur.entry_date} salary row (net ${fmt(cur.net)}) as paid.` : `Undid Paid on ${cur.agent_name}'s ${cur.entry_date} salary row.`
-    });
-    return getEntry(trx, id);
-  });
-}
+// --- Delete ---------------------------------------------------------------------
 
 export async function deleteEntry(id, actorId) {
   const cur = await getEntry(db, id);
   if (!cur) throw new SalaryError(404, 'That row was not found.');
-  if (cur.status === 'paid') throw new SalaryError(409, 'This row is marked Paid. Press "Undo" on it before deleting.');
   await db('salary_entries').where({ id }).delete(); // its allowance lines go with it
   await db('audit_logs').insert({
     actor_id: actorId, action_type: 'SALARY_ENTRY_DELETED',

@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireSalaryAdmin, salaryErrorResponse } from '@/lib/salaryApi.js';
-import { updateEntry, setPaid, deleteEntry } from '@/lib/services/salary.js';
+import { updateEntry, deleteEntry } from '@/lib/services/salary.js';
 
-// Change fields of a row, or mark it paid / undo with { paid: true | false }.
+// Change fields of a row.
 export async function PATCH(request, { params }) {
   try {
     const user = await requireSalaryAdmin(request);
     const body = await request.json();
-    const entry = 'paid' in body ? await setPaid(params.id, !!body.paid, user.id) : await updateEntry(params.id, body, user.id);
+    const entry = await updateEntry(params.id, body, user.id);
     return NextResponse.json({ entry });
   } catch (error) {
     return salaryErrorResponse(error, 'Salary edit error', request);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSalaryAdmin, salaryErrorResponse } from '@/lib/salaryApi.js';
 import { listEntries, createEntry } from '@/lib/services/salary.js';
 
-// The table's rows: GET ?month=2026-11&agent_id=&type_id=&status=
+// The table's rows: GET ?month=2026-11&agent_id=&type_id=
 export async function GET(request) {
   try {
     await requireSalaryAdmin(request);
@@ -10,8 +10,7 @@ export async function GET(request) {
     return NextResponse.json(await listEntries({
       month: searchParams.get('month') || '',
       agentId: searchParams.get('agent_id') || '',
-      typeId: searchParams.get('type_id') || '',
-      status: searchParams.get('status') || ''
+      typeId: searchParams.get('type_id') || ''
     }));
   } catch (error) {
     return salaryErrorResponse(error, 'Salary list error', request);
