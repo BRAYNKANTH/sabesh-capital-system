@@ -81,3 +81,7 @@ CREATE TABLE IF NOT EXISTS salary_employee_details (
 
 -- Rows are entered when the money is given, so every row counts as given (no separate Paid step).
 UPDATE salary_entries SET status = 'paid', paid_on = COALESCE(paid_on, entry_date) WHERE status <> 'paid';
+
+-- How the money was given (cash / bank_transfer / cheque) and its reference (transfer ref, cheque no.).
+ALTER TABLE salary_entries ADD COLUMN IF NOT EXISTS payment_method varchar(20) NOT NULL DEFAULT 'cash';
+ALTER TABLE salary_entries ADD COLUMN IF NOT EXISTS payment_ref varchar(60);

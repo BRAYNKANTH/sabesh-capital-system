@@ -9,7 +9,8 @@ export class SalaryError extends Error {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-const EDITABLE = ['entry_date', 'agent_id', 'basic_salary', 'advance', 'deduction', 'note'];
+const EDITABLE = ['entry_date', 'agent_id', 'basic_salary', 'advance', 'deduction', 'payment_method', 'payment_ref', 'note'];
+const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque'];
 const LABELS = { basic_salary: 'Basic salary', advance: 'Advance', deduction: 'Deduction', amount: 'Allowance' };
 
 const tidyName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
@@ -26,7 +27,27 @@ function money(v, key) {
 
 function validDate(v) {
   if (!DATE_RE.test(v || '') || Number.isNaN(Date.parse(v))) throw new SalaryError(400, 'Pick a valid date.');
+  const year = Number(v.slice(0, 4));
+  if (year < 2000 || year > 2100) throw new SalaryError(400, 'Pick a date between the years 2000 and 2100.');
   return v;
+}
+
+function cleanNote(v) {
+  const t = typeof v === 'string' ? v.trim() : '';
+  if (t.length > 300) throw new SalaryError(400, 'The note is too long (300 characters at most).');
+  return t || null;
+}
+
+function cleanMethod(v) {
+  const m = v || 'cash';
+  if (!PAYMENT_METHODS.includes(m)) throw new SalaryError(400, 'Choose cash, bank transfer or cheque.');
+  return m;
+}
+
+function cleanRef(v) {
+  const t = typeof v === 'string' ? v.trim() : '';
+  if (t.length > 60) throw new SalaryError(400, 'The reference is too long (60 characters at most).');
+  return t || null;
 }
 
 // [first day of the month, first day of the next month) for a 'YYYY-MM' string.
@@ -59,7 +80,7 @@ export async function createType(name, actorId) {
 
 const entryQuery = (k) => k('salary_entries as e')
   .join('users as u', 'u.id', 'e.agent_id')
-  .select('e.id', 'e.agent_id', 'u.name as agent_name', 'e.note',
+  .select('e.id', 'e.agent_id', 'u.name as agent_name', 'e.note', 'e.payment_method', 'e.payment_ref',
     k.raw("to_char(e.entry_date, 'YYYY-MM-DD') as entry_date"),
     k.raw('e.basic_salary::float8 as basic_salary'), k.raw('e.advance::float8 as advance'), k.raw('e.deduction::float8 as deduction'));
 
@@ -135,7 +156,9 @@ export async function createEntry(input, actorId) {
     basic_salary: typedBasic ? money(input.basic_salary, 'basic_salary') : await defaultBasic(agent.id, entryDate),
     advance: money(input.advance, 'advance'),
     deduction: money(input.deduction, 'deduction'),
-    note: typeof input.note === 'string' && input.note.trim() ? input.note.trim() : null,
+    payment_method: cleanMethod(input.payment_method),
+    payment_ref: cleanRef(input.payment_ref),
+    note: cleanNote(input.note),
     // A row is entered when the money is given, so it is recorded as given straight away.
     status: 'paid',
     paid_on: entryDate,
@@ -168,7 +191,9 @@ export async function updateEntry(id, patch, actorId) {
       let value = patch[key];
       if (key === 'entry_date') value = validDate(value);
       else if (key === 'agent_id') value = (await requireAgent(value)).id;
-      else if (key === 'note') value = typeof value === 'string' && value.trim() ? value.trim() : null;
+      else if (key === 'note') value = cleanNote(value);
+      else if (key === 'payment_method') value = cleanMethod(value);
+      else if (key === 'payment_ref') value = cleanRef(value);
       else value = money(value, key);
       const before = key === 'basic_salary' || key === 'advance' || key === 'deduction' ? Number(cur[key]) : cur[key];
       const same = key === 'entry_date' ? new Date(before).toLocaleDateString('sv-SE') === value : before === value || (before == null && value == null);
@@ -317,4 +342,38 @@ export async function saveEmployeeDetails(agentId, input, actorId) {
     await db('audit_logs').insert({ actor_id: actorId, action_type: 'SALARY_EMPLOYEE_DETAILS', description: `Updated ${agent.name}'s salary details: ${changes.join(', ')}.` });
   }
   return { id: agent.id, name: agent.name, basic_salary: basic, bank_name: clean.bank_name || '', bank_branch: clean.bank_branch || '', account_holder: clean.account_holder || '', account_number: clean.account_number || '' };
+}
+
+// --- Start of month -------------------------------------------------------------
+
+// Adds a row, with the saved basic salary, for every employee who has one saved and no row yet
+// in the month. Employees without a saved basic salary are not touched.
+export async function addAllEmployeesForMonth(month, actorId) {
+  if (!MONTH_RE.test(month || '')) throw new SalaryError(400, 'Choose a month first.');
+  if (!(await detailsTableExists())) throw new SalaryError(503, 'The salary setup has not been run on the database yet (scripts/salary-portal.sql).');
+  const [from, to] = monthBounds(month);
+  const entryDate = month === today().slice(0, 7) ? today() : `${month}-01`;
+
+  return db.transaction(async (trx) => {
+    const candidates = await trx('salary_employee_details as d').join('users as u', 'u.id', 'd.agent_id')
+      .where('u.is_active', true).whereIn('u.role', EMPLOYEE_ROLES).where('d.basic_salary', '>', 0)
+      .select('u.id', 'u.name', 'd.basic_salary');
+    if (!candidates.length) throw new SalaryError(400, 'No employee has a basic salary saved yet. Set it in Employee details first.');
+
+    const have = await trx('salary_entries').where('entry_date', '>=', from).where('entry_date', '<', to)
+      .whereIn('agent_id', candidates.map((c) => c.id)).distinct('agent_id');
+    const haveSet = new Set(have.map((h) => h.agent_id));
+    const todo = candidates.filter((c) => !haveSet.has(c.id));
+
+    if (todo.length) {
+      await trx('salary_entries').insert(todo.map((c) => ({
+        entry_date: entryDate, agent_id: c.id, basic_salary: c.basic_salary, status: 'paid', paid_on: entryDate, created_by: actorId
+      })));
+      await trx('audit_logs').insert({
+        actor_id: actorId, action_type: 'SALARY_MONTH_ROWS_ADDED',
+        description: `Added ${todo.length} salary row(s) for ${month}: ${todo.map((c) => c.name).join(', ')}.`
+      });
+    }
+    return { created: todo.length, alreadyHad: candidates.length - todo.length };
+  });
 }

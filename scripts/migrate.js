@@ -625,6 +625,9 @@ async function runIncrementalMigrations() {
   }
   // Money given to the employee ahead of salary; counts towards the row's net.
   await addColumnIfMissing('salary_entries', 'advance', (t) => t.decimal('advance', 15, 2).notNullable().defaultTo(0));
+  // How the money was given (cash / bank_transfer / cheque) and its reference (transfer ref, cheque no.).
+  await addColumnIfMissing('salary_entries', 'payment_method', (t) => t.string('payment_method', 20).notNullable().defaultTo('cash'));
+  await addColumnIfMissing('salary_entries', 'payment_ref', (t) => t.string('payment_ref', 60).nullable());
 
   if (!(await db.schema.hasTable('salary_entry_allowances'))) {
     await db.schema.createTable('salary_entry_allowances', (table) => {

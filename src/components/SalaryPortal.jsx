@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/apiClient.js';
-import { ArrowLeft, ChevronLeft, ChevronRight, Landmark, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Landmark, Plus, Trash2, Users } from 'lucide-react';
 
 const num = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const money = (n) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -57,6 +57,43 @@ function MoneyInput({ value, disabled, label, onSave, width = '110px' }) {
       style={{ width, textAlign: 'right', padding: '6px 8px' }} />
   );
 }
+
+// A date you can type or pick. It saves once the date is complete and sensible (a moment after you
+// stop typing) or when you leave the box, so half-typed years never get saved.
+function DateField({ value, label, onSave }) {
+  const [draft, setDraft] = useState(value || '');
+  const timer = useRef(null);
+  useEffect(() => { setDraft(value || ''); }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const usable = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 2000 && Number(v.slice(0, 4)) <= 2100;
+  const commit = (v) => {
+    clearTimeout(timer.current);
+    if (usable(v) && v !== value) onSave(v);
+    else if (!usable(v)) setDraft(value || '');
+  };
+  return (
+    <input type="date" className="glass-input" aria-label={label} value={draft} min="2000-01-01" max="2100-12-31"
+      onChange={(e) => { setDraft(e.target.value); clearTimeout(timer.current); if (usable(e.target.value)) timer.current = setTimeout(() => commit(e.target.value), 700); }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={{ padding: '6px 8px' }} />
+  );
+}
+
+// A text box that saves when you leave it (or press Enter), only if it changed.
+function TextField({ value, label, onSave, placeholder, width = '170px', maxLength = 300 }) {
+  const [draft, setDraft] = useState(value || '');
+  useEffect(() => { setDraft(value || ''); }, [value]);
+  const commit = () => { if (draft.trim() !== (value || '')) onSave(draft.trim()); };
+  return (
+    <input className="glass-input" aria-label={label} value={draft} placeholder={placeholder} maxLength={maxLength} autoComplete="off"
+      onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setDraft(value || ''); e.currentTarget.blur(); } }}
+      style={{ width, padding: '6px 8px' }} />
+  );
+}
+
+const METHODS = [['cash', 'Cash'], ['bank_transfer', 'Bank transfer'], ['cheque', 'Cheque']];
 
 // Allowance type dropdown, with "+ Add new type…" which turns into a small name box.
 function TypeSelect({ value, types, usedIds = [], disabled, label, onPick, onCreate }) {
@@ -328,14 +365,20 @@ export default function SalaryPortal({ showToast, onBack }) {
 
   const startDraft = () => setDraft({
     entry_date: month === todayStr().slice(0, 7) ? todayStr() : `${month}-01`,
-    agent_id: filters.agent_id, allowances: [], allowance_total: 0
+    agent_id: filters.agent_id, allowances: [], allowance_total: 0, payment_method: 'cash'
   });
 
   // Edit a saved row.
   const patchEntry = async (entry, patch) => {
     try {
       const res = await track(() => api.patch(`/salary/entries/${entry.id}`, patch));
-      replace(res.entry);
+      const movedTo = res.entry.entry_date.slice(0, 7);
+      if (month && movedTo !== month) {
+        setData((d) => ({ ...d, entries: d.entries.filter((x) => x.id !== entry.id) }));
+        showToast(`Moved to ${monthLabel(movedTo)}. Change the month to see it.`, 'info');
+      } else {
+        replace(res.entry);
+      }
     } catch (err) {
       showToast(err.message, 'error');
       load(); // put the row back to what is saved
@@ -367,6 +410,22 @@ export default function SalaryPortal({ showToast, onBack }) {
     } catch (err) {
       showToast(err.message, 'error');
       setDraft(next);
+    }
+  };
+
+  // Start of month: a row with the saved basic salary for every employee who has none yet.
+  const addAllForMonth = async () => {
+    if (!month) return;
+    if (!window.confirm(`Add a row for ${monthLabel(month)} for every employee who has a saved basic salary and no row yet?\n\nEach row starts with their basic salary. You can change or delete them afterwards.`)) return;
+    setBusy('bulk');
+    try {
+      const res = await track(() => api.post('/salary/entries/bulk', { month }));
+      showToast(res.created ? `Added ${res.created} row${res.created === 1 ? '' : 's'}${res.alreadyHad ? ` (${res.alreadyHad} already had one)` : ''}.` : 'Everyone with a saved basic salary already has a row this month.', res.created ? undefined : 'info');
+      await load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -417,6 +476,7 @@ export default function SalaryPortal({ showToast, onBack }) {
   const row = (rec, { isDraft }) => {
     const edit = (patch) => (isDraft ? patchDraft(patch) : patchEntry(rec, patch));
     const who = rec.agent_name || 'new row';
+    const method = rec.payment_method || 'cash';
     return (
       <tr key={isDraft ? 'draft' : rec.id}>
         <td style={{ ...td, ...left, ...(compact ? {} : stickyLeft), minWidth: '190px' }}>
@@ -435,8 +495,7 @@ export default function SalaryPortal({ showToast, onBack }) {
           {compact && <div style={{ marginTop: '10px' }}>{statusBlock(rec, { isDraft, who, align: 'left' })}</div>}
         </td>
         <td style={{ ...td, ...left }}>
-          <input type="date" className="glass-input" aria-label={`Date for ${who}`} value={rec.entry_date || ''}
-            onChange={(e) => e.target.value && edit({ entry_date: e.target.value })} style={{ padding: '6px 8px' }} />
+          <DateField value={rec.entry_date} label={`Date for ${who}`} onSave={(v) => edit({ entry_date: v })} />
         </td>
         <td style={td}><MoneyInput value={rec.basic_salary} label={`Basic salary for ${who}`} onSave={(v) => edit({ basic_salary: v })} /></td>
         <td style={td}>
@@ -449,6 +508,21 @@ export default function SalaryPortal({ showToast, onBack }) {
         </td>
         <td style={td}><MoneyInput value={rec.advance} label={`Advance for ${who}`} onSave={(v) => edit({ advance: v })} /></td>
         <td style={td}><MoneyInput value={rec.deduction} label={`Deductions for ${who}`} onSave={(v) => edit({ deduction: v })} /></td>
+        <td style={{ ...td, ...left }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <select className="glass-input" aria-label={`How money was given to ${who}`} value={method}
+              onChange={(e) => edit({ payment_method: e.target.value })} style={{ width: '150px', padding: '6px 8px' }}>
+              {METHODS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+            {method !== 'cash' && (
+              <TextField value={rec.payment_ref} label={`${method === 'cheque' ? 'Cheque number' : 'Transfer reference'} for ${who}`}
+                placeholder={method === 'cheque' ? 'Cheque no.' : 'Reference no.'} width="150px" maxLength={60} onSave={(v) => edit({ payment_ref: v })} />
+            )}
+          </div>
+        </td>
+        <td style={{ ...td, ...left }}>
+          <TextField value={rec.note} label={`Note for ${who}`} placeholder="Note (optional)" width="190px" onSave={(v) => edit({ note: v })} />
+        </td>
         {!compact && <td style={{ ...td, ...stickyRight }}>{statusBlock(rec, { isDraft, who, align: 'right' })}</td>}
       </tr>
     );
@@ -465,12 +539,14 @@ export default function SalaryPortal({ showToast, onBack }) {
       <td style={{ ...td, fontWeight: 700, ...tabular }}>{num(g.allowance)}</td>
       <td style={{ ...td, fontWeight: 700, ...tabular }}>{num(g.advance)}</td>
       <td style={{ ...td, fontWeight: 700, ...tabular }}>{num(g.deduction)}</td>
+      <td style={td} />
+      <td style={td} />
       {!compact ? <td style={{ ...td, ...stickyRight, background: 'var(--bg-tertiary)', fontWeight: 800, fontSize: '16px', ...tabular }}>{num(g.net)}</td> : null}
     </tr>
   );
 
   const saveText = save === 'saving' ? 'Saving…' : save === 'saved' ? '✓ All changes saved' : save === 'error' ? 'Could not save — see the message' : '';
-  const colCount = compact ? 6 : 7;
+  const colCount = compact ? 8 : 9;
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -584,7 +660,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         <div className="glass-card" style={{ padding: '24px' }}>{loadError ? '' : 'Loading…'}</div>
       ) : (
         <div className="glass-card" style={{ padding: 0, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: compact ? '760px' : '980px' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: compact ? '1100px' : '1280px' }}>
             <caption style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Monthly salary table, one group of rows per employee</caption>
             <thead>
               <tr>
@@ -594,6 +670,8 @@ export default function SalaryPortal({ showToast, onBack }) {
                 <th scope="col" style={th}>Allowances</th>
                 <th scope="col" style={th}>Advance</th>
                 <th scope="col" style={th}>Deductions</th>
+                <th scope="col" style={{ ...th, ...left }}>Given by</th>
+                <th scope="col" style={{ ...th, ...left }}>Note</th>
                 {!compact && <th scope="col" style={{ ...th, ...stickyRight }}>Net Salary</th>}
               </tr>
             </thead>
@@ -615,6 +693,8 @@ export default function SalaryPortal({ showToast, onBack }) {
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none', ...tabular }}>{num(sum('allowance_total'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none', ...tabular }}>{num(sum('advance'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none', ...tabular }}>{num(sum('deduction'))}</td>
+                <td style={{ ...td, borderBottom: 'none' }} />
+                <td style={{ ...td, borderBottom: 'none' }} />
                 {!compact && <td style={{ ...td, ...stickyRight, fontWeight: 800, fontSize: '16px', borderBottom: 'none', ...tabular }}>{num(sum('net'))}</td>}
               </tr>
               {compact && (
@@ -625,11 +705,18 @@ export default function SalaryPortal({ showToast, onBack }) {
         </div>
       )}
 
-      <div>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button type="button" className="glass-btn glass-btn-emerald" style={{ padding: '12px 20px' }} disabled={!!draft || data === null} onClick={startDraft}>
           <Plus className="icon" /> Add row
         </button>
-        {draft && <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>Choose the employee in the new row to save it.</span>}
+        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '12px 20px' }} disabled={!month || data === null || busy === 'bulk'} onClick={addAllForMonth}
+          title={month ? undefined : 'Choose a month first'}>
+          <Users className="icon" /> Add all employees for {month ? monthLabel(month) : 'a month'}
+        </button>
+        {draft && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Choose the employee in the new row to save it.</span>}
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '-8px' }}>
+        "Add all employees" adds a row with the saved basic salary for everyone who has one saved and no row this month (set it in Employee details).
       </div>
       {detailsFor !== null && (
         <EmployeeDetailsDialog employees={agents} startId={detailsFor} ready={detailsReady} showToast={showToast}

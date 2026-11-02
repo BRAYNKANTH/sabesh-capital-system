@@ -17,7 +17,7 @@ export async function GET(request) {
   }
 }
 
-// Add a row: { entry_date, agent_id, basic_salary, allowance_type_id, allowance_amount, deduction, note }
+// Add a row: { entry_date, agent_id, basic_salary?, advance?, deduction?, payment_method?, payment_ref?, note? }
 export async function POST(request) {
   try {
     const user = await requireSalaryAdmin(request);
