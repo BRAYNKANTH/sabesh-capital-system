@@ -608,6 +608,19 @@ async function runIncrementalMigrations() {
     });
     console.log("Migration: created table 'salary_entries'.");
   }
+  // Each employee's default basic salary (fills their first row of a month) and bank details.
+  if (!(await db.schema.hasTable('salary_employee_details'))) {
+    await db.schema.createTable('salary_employee_details', (table) => {
+      table.uuid('agent_id').primary().references('id').inTable('users').onDelete('CASCADE');
+      table.decimal('basic_salary', 15, 2).notNullable().defaultTo(0);
+      table.string('bank_name', 100).nullable();
+      table.string('bank_branch', 100).nullable();
+      table.string('account_holder', 150).nullable();
+      table.string('account_number', 40).nullable();
+      table.timestamp('updated_at').defaultTo(db.fn.now());
+    });
+    console.log("Migration: created table 'salary_employee_details'.");
+  }
   // Money given to the employee ahead of salary; counts towards the row's net.
   await addColumnIfMissing('salary_entries', 'advance', (t) => t.decimal('advance', 15, 2).notNullable().defaultTo(0));
 

@@ -67,3 +67,14 @@ END $$;
 
 -- Money given to the employee ahead of salary; counts towards the row's net.
 ALTER TABLE salary_entries ADD COLUMN IF NOT EXISTS advance numeric(15,2) NOT NULL DEFAULT 0;
+
+-- Each employee's default basic salary (fills their first row of a month) and bank details.
+CREATE TABLE IF NOT EXISTS salary_employee_details (
+  agent_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  basic_salary numeric(15,2) NOT NULL DEFAULT 0,
+  bank_name varchar(100),
+  bank_branch varchar(100),
+  account_holder varchar(150),
+  account_number varchar(40),
+  updated_at timestamptz DEFAULT now()
+);

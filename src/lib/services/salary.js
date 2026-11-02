@@ -124,12 +124,26 @@ async function assertOneRowPerMonth(k, agent, entryDate, exceptId) {
   if (await q.first('id')) throw new SalaryError(409, `${agent.name} already has an unpaid row for ${entryDate.slice(0, 7)}. Add to that row, or mark it Paid first.`);
 }
 
+// The employee's saved basic salary, used to fill a new row's Basic Salary when none is
+// typed. Only for their first row of the month, so an advance or second payment does not
+// repeat the full salary.
+async function defaultBasic(agentId, entryDate) {
+  if (!(await detailsTableExists())) return 0;
+  const details = await db('salary_employee_details').where({ agent_id: agentId }).first('basic_salary');
+  if (!details) return 0;
+  const [from, to] = monthBounds(entryDate.slice(0, 7));
+  const existing = await db('salary_entries').where('agent_id', agentId).where('entry_date', '>=', from).where('entry_date', '<', to).first('id');
+  return existing ? 0 : Number(details.basic_salary) || 0;
+}
+
 export async function createEntry(input, actorId) {
   const agent = await requireAgent(input.agent_id);
+  const entryDate = validDate(input.entry_date || today());
+  const typedBasic = input.basic_salary !== undefined && input.basic_salary !== null && input.basic_salary !== '';
   const row = {
-    entry_date: validDate(input.entry_date || today()),
+    entry_date: entryDate,
     agent_id: agent.id,
-    basic_salary: money(input.basic_salary, 'basic_salary'),
+    basic_salary: typedBasic ? money(input.basic_salary, 'basic_salary') : await defaultBasic(agent.id, entryDate),
     advance: money(input.advance, 'advance'),
     deduction: money(input.deduction, 'deduction'),
     note: typeof input.note === 'string' && input.note.trim() ? input.note.trim() : null,
@@ -268,4 +282,71 @@ export async function deleteEntry(id, actorId) {
     actor_id: actorId, action_type: 'SALARY_ENTRY_DELETED',
     description: `Deleted ${cur.agent_name}'s ${cur.entry_date} salary row (net ${fmt(cur.net)}).`
   });
+}
+
+// --- Employee details (basic salary + bank) -----------------------------------
+
+const DETAIL_FIELDS = ['bank_name', 'bank_branch', 'account_holder', 'account_number'];
+const EMPLOYEE_ROLES = ['agent', 'admin'];
+
+// The details table is created by the setup script; until it exists the portal still works,
+// just without saved details.
+async function detailsTableExists() {
+  return db.schema.hasTable('salary_employee_details');
+}
+
+// Everyone who can be paid (active agents and admins) with their saved details, if any.
+export async function listEmployees() {
+  const ready = await detailsTableExists();
+  const q = db('users as u').whereIn('u.role', EMPLOYEE_ROLES).where('u.is_active', true).orderBy('u.name').select('u.id', 'u.name', 'u.role');
+  if (ready) {
+    q.leftJoin('salary_employee_details as d', 'd.agent_id', 'u.id')
+      .select(db.raw('d.basic_salary::float8 as basic_salary'), 'd.bank_name', 'd.bank_branch', 'd.account_holder', 'd.account_number');
+  }
+  const rows = await q;
+  return {
+    detailsReady: ready,
+    employees: rows.map((r) => ({
+      id: r.id, name: r.name, role: r.role,
+      basic_salary: r.basic_salary || 0,
+      bank_name: r.bank_name || '', bank_branch: r.bank_branch || '',
+      account_holder: r.account_holder || '', account_number: r.account_number || ''
+    }))
+  };
+}
+
+const maskAccount = (n) => (n ? `••••${String(n).slice(-4)}` : 'none');
+
+// Saves one employee's basic salary and bank details.
+export async function saveEmployeeDetails(agentId, input, actorId) {
+  if (!(await detailsTableExists())) throw new SalaryError(503, 'The salary setup has not been run on the database yet (scripts/salary-portal.sql).');
+  const agent = await db('users').where({ id: agentId, is_active: true }).whereIn('role', EMPLOYEE_ROLES).first('id', 'name');
+  if (!agent) throw new SalaryError(404, 'That employee was not found.');
+
+  const basic = money(input.basic_salary, 'basic_salary');
+  const clean = {};
+  for (const key of DETAIL_FIELDS) {
+    const v = typeof input[key] === 'string' ? input[key].trim().replace(/\s+/g, ' ') : '';
+    if (v.length > (key === 'account_holder' ? 150 : 100)) throw new SalaryError(400, 'One of the bank fields is too long.');
+    clean[key] = v || null;
+  }
+  if (clean.account_number) {
+    clean.account_number = clean.account_number.replace(/\s+/g, '');
+    if (!/^[0-9A-Za-z-]{4,30}$/.test(clean.account_number)) throw new SalaryError(400, 'The account number should be 4 to 30 letters or digits.');
+  }
+
+  const before = await db('salary_employee_details').where({ agent_id: agent.id }).first();
+  await db('salary_employee_details').insert({ agent_id: agent.id, basic_salary: basic, ...clean, updated_at: db.fn.now() })
+    .onConflict('agent_id').merge();
+
+  const changes = [];
+  if (Number(before?.basic_salary || 0) !== basic) changes.push(`basic salary ${fmt(before?.basic_salary || 0)} -> ${fmt(basic)}`);
+  if ((before?.bank_name || null) !== clean.bank_name) changes.push('bank name');
+  if ((before?.bank_branch || null) !== clean.bank_branch) changes.push('bank branch');
+  if ((before?.account_holder || null) !== clean.account_holder) changes.push('account holder');
+  if ((before?.account_number || null) !== clean.account_number) changes.push(`account number ${maskAccount(before?.account_number)} -> ${maskAccount(clean.account_number)}`);
+  if (changes.length) {
+    await db('audit_logs').insert({ actor_id: actorId, action_type: 'SALARY_EMPLOYEE_DETAILS', description: `Updated ${agent.name}'s salary details: ${changes.join(', ')}.` });
+  }
+  return { id: agent.id, name: agent.name, basic_salary: basic, bank_name: clean.bank_name || '', bank_branch: clean.bank_branch || '', account_holder: clean.account_holder || '', account_number: clean.account_number || '' };
 }
