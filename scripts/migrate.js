@@ -572,42 +572,35 @@ async function runIncrementalMigrations() {
     await db.raw('CREATE UNIQUE INDEX salary_types_name_lower_idx ON salary_types (lower(name))');
     console.log("Migration: created table 'salary_types'.");
   }
-  // Column kinds: 'salary' (basic salary), 'allowance' (added to pay), 'deduction'
-  // (taken off: advances, loan repayments...). Types the admin adds are allowances
-  // or deductions.
+  // The allowance types offered in the table's Allowances dropdown. Only kind
+  // 'allowance' is listed; the admin can add more from the dropdown itself.
   await addColumnIfMissing('salary_types', 'kind', (t) => t.string('kind', 10).notNullable().defaultTo('allowance'));
-  for (const [name, kind, order] of [
-    ['Basic Salary', 'salary', -1], ['Vehicle Allowance', 'allowance', 0], ['Petrol Allowance', 'allowance', 1],
-    ['Bonus Allowance', 'allowance', 2], ['Additional Allowance', 'allowance', 3], ['Advance', 'deduction', 4]
-  ]) {
-    await db.raw('INSERT INTO salary_types (name, kind, sort_order) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM salary_types WHERE lower(name) = lower(?))', [name, kind, order, name]);
+  for (const [i, name] of ['Vehicle Allowance', 'Petrol Allowance', 'Bonus Allowance', 'Additional Allowance'].entries()) {
+    await db.raw("INSERT INTO salary_types (name, kind, sort_order) SELECT ?, 'allowance', ? WHERE NOT EXISTS (SELECT 1 FROM salary_types WHERE lower(name) = lower(?))", [name, i, name]);
   }
 
-  // The monthly table: one row per agent per month, one item per column (type).
-  // status 'pending' until the admin presses Paid (then the row is locked).
-  if (!(await db.schema.hasTable('salary_sheet_rows'))) {
-    await db.schema.createTable('salary_sheet_rows', (table) => {
+  // The salary table: one row per entry (date, employee, basic salary, one allowance
+  // with its type, deductions). Net = basic + allowance - deductions. 'pending' until
+  // the admin presses Paid, which locks the row.
+  if (!(await db.schema.hasTable('salary_entries'))) {
+    await db.schema.createTable('salary_entries', (table) => {
       table.uuid('id').primary().defaultTo(db.fn.uuid());
+      table.date('entry_date').notNullable();
       table.uuid('agent_id').notNullable().references('id').inTable('users').onDelete('RESTRICT');
-      table.string('month', 7).notNullable(); // 'YYYY-MM'
+      table.decimal('basic_salary', 15, 2).notNullable().defaultTo(0);
+      table.uuid('allowance_type_id').nullable().references('id').inTable('salary_types').onDelete('RESTRICT');
+      table.decimal('allowance_amount', 15, 2).notNullable().defaultTo(0);
+      table.decimal('deduction', 15, 2).notNullable().defaultTo(0);
       table.string('status', 10).notNullable().defaultTo('pending'); // pending | paid
       table.date('paid_on').nullable();
+      table.text('note').nullable();
+      table.uuid('created_by').references('id').inTable('users').onDelete('SET NULL');
       table.timestamp('created_at').defaultTo(db.fn.now());
       table.timestamp('updated_at').defaultTo(db.fn.now());
-      table.unique(['agent_id', 'month']);
-      table.index('month');
+      table.index('entry_date');
+      table.index('agent_id');
     });
-    console.log("Migration: created table 'salary_sheet_rows'.");
-  }
-  if (!(await db.schema.hasTable('salary_sheet_items'))) {
-    await db.schema.createTable('salary_sheet_items', (table) => {
-      table.uuid('id').primary().defaultTo(db.fn.uuid());
-      table.uuid('row_id').notNullable().references('id').inTable('salary_sheet_rows').onDelete('CASCADE');
-      table.uuid('type_id').notNullable().references('id').inTable('salary_types').onDelete('RESTRICT');
-      table.decimal('amount', 15, 2).notNullable();
-      table.unique(['row_id', 'type_id']);
-    });
-    console.log("Migration: created table 'salary_sheet_items'.");
+    console.log("Migration: created table 'salary_entries'.");
   }
 
   // ---------------------------------------------------------------------
