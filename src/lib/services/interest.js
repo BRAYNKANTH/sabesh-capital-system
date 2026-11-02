@@ -24,7 +24,9 @@ export async function runInterestAccruals(loanId) {
     // Flat installment loans (Daily + Fixed Term) have their full interest
     // total set upfront at creation/approval — see recordFlatInstallmentCollection
     // in ledger.js — not accrued incrementally like every other loan type.
-    .andWhere('is_flat_installment', false);
+    .andWhere('is_flat_installment', false)
+    // Cheque loans carry their whole-period interest from the day they are issued.
+    .andWhereNot('collection_mode', 'cheque');
   if (loanId) query = query.andWhere('id', loanId);
   const activeLoans = await query;
 

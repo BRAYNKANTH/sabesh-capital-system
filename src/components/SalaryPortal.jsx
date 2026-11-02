@@ -14,7 +14,7 @@ const shiftMonth = (m, by) => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 const monthLabel = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-const netOf = (e) => Math.round(((+e.basic_salary || 0) + (+e.allowance_total || 0) - (+e.deduction || 0)) * 100) / 100;
+const netOf = (e) => Math.round(((+e.basic_salary || 0) + (+e.allowance_total || 0) + (+e.advance || 0) - (+e.deduction || 0)) * 100) / 100;
 
 const NEW_TYPE = '__new__';
 
@@ -163,7 +163,7 @@ export default function SalaryPortal({ showToast, onBack }) {
 
   const startDraft = () => setDraft({
     entry_date: month === todayStr().slice(0, 7) ? todayStr() : `${month}-01`,
-    agent_id: filters.agent_id, basic_salary: 0, deduction: 0, allowances: [], allowance_total: 0
+    agent_id: filters.agent_id, basic_salary: 0, advance: 0, deduction: 0, allowances: [], allowance_total: 0
   });
 
   // Edit a saved row.
@@ -256,7 +256,7 @@ export default function SalaryPortal({ showToast, onBack }) {
           <select className="glass-input" aria-label="Employee name" disabled={locked} value={rec.agent_id || ''}
             onChange={(e) => e.target.value && edit({ agent_id: e.target.value })} style={{ width: '170px', padding: '6px 8px' }}>
             <option value="">Choose employee…</option>
-            {agents.filter((a) => !isDraft || !entries.some((e) => e.agent_id === a.id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            {agents.filter((a) => !isDraft || !entries.some((e) => e.agent_id === a.id && e.status !== 'paid')).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </td>
         <td style={td}><MoneyInput value={rec.basic_salary} disabled={locked} label={`Basic salary for ${who}`} onSave={(v) => edit({ basic_salary: v })} /></td>
@@ -268,6 +268,7 @@ export default function SalaryPortal({ showToast, onBack }) {
               onAdd={(typeId) => addLine(rec, typeId)} onChange={(l, patch) => changeLine(rec, l, patch)} onRemove={(l) => removeLine(rec, l)} onCreateType={addTypeByName} />
           )}
         </td>
+        <td style={td}><MoneyInput value={rec.advance} disabled={locked} label={`Advance for ${who}`} onSave={(v) => edit({ advance: v })} /></td>
         <td style={td}><MoneyInput value={rec.deduction} disabled={locked} label={`Deductions for ${who}`} onSave={(v) => edit({ deduction: v })} /></td>
         <td style={{ ...td, fontWeight: 700, paddingTop: '14px' }}>{netOf(rec) ? num(netOf(rec)) : '–'}</td>
         <td style={td}>
@@ -363,13 +364,14 @@ export default function SalaryPortal({ showToast, onBack }) {
         <div className="glass-card" style={{ padding: '24px' }}>{loadError ? '' : 'Loading…'}</div>
       ) : (
         <div className="glass-card" style={{ padding: 0, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '860px' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '960px' }}>
             <thead>
               <tr>
                 <th style={{ ...th, ...left }}>Date</th>
                 <th style={{ ...th, ...left }}>Employee Name</th>
                 <th style={th}>Basic Salary</th>
                 <th style={th}>Allowances</th>
+                <th style={th}>Advance</th>
                 <th style={th}>Deductions</th>
                 <th style={th}>Net Salary</th>
                 <th style={th} />
@@ -379,13 +381,14 @@ export default function SalaryPortal({ showToast, onBack }) {
               {entries.map((e) => row(e, { isDraft: false }))}
               {draft && row({ ...draft, net: netOf(draft) }, { isDraft: true })}
               {entries.length === 0 && !draft && (
-                <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)', padding: '28px' }}>No rows {month ? 'for this month' : ''} yet. Tap "Add row" below.</td></tr>
+                <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)', padding: '28px' }}>No rows {month ? 'for this month' : ''} yet. Tap "Add row" below.</td></tr>
               )}
               <tr>
                 <td style={{ ...td, borderBottom: 'none' }} />
                 <td style={{ ...td, ...left, fontWeight: 700, borderBottom: 'none' }}>Total</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('basic_salary'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('allowance_total'))}</td>
+                <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('advance'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('deduction'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('net'))}</td>
                 <td style={{ ...td, borderBottom: 'none' }} />
@@ -401,7 +404,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         </button>
       </div>
       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        Net Salary = basic salary + allowance − deductions. A new row is saved as soon as you choose the employee. For money an agent spent themselves (for example petrol), add that allowance on their row and press Paid when you give it back.
+        Net Salary = basic salary + allowances + advance − deductions. To recover an advance later, type it in that employee's Deductions. A new row is saved as soon as you choose the employee. For money an agent spent themselves (for example petrol), add that allowance on their row and press Paid when you give it back.
       </div>
     </div>
   );

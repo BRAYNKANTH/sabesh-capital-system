@@ -64,3 +64,6 @@ BEGIN
     ALTER TABLE salary_entries DROP COLUMN IF EXISTS allowance_type_id;
   END IF;
 END $$;
+
+-- Money given to the employee ahead of salary; counts towards the row's net.
+ALTER TABLE salary_entries ADD COLUMN IF NOT EXISTS advance numeric(15,2) NOT NULL DEFAULT 0;

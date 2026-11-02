@@ -85,9 +85,14 @@ export async function notifyPasswordResetOtp({ user, otp }) {
 /**
  * Triggers alerts for loan creation.
  */
-export async function notifyLoanCreation({ borrower, principal, interestType, rate, isFlatInstallment, dailyInstallmentAmount, durationPeriods }) {
+export async function notifyLoanCreation({ borrower, principal, interestType, rate, isFlatInstallment, dailyInstallmentAmount, durationPeriods, cheque }) {
   let borrowerMsg;
-  if (isFlatInstallment) {
+  if (cheque) {
+    // Cheque loan: one flat interest for the whole period, all due on the cheque date.
+    const interest = Number(principal) * (Number(rate) / 100);
+    const total = Number(principal) + interest;
+    borrowerMsg = `Dear ${borrower.name}, you have successfully got a loan of Rs. ${Number(principal).toLocaleString()} at ${rate}% interest for the period. Total due on ${cheque.chequeDate}: Rs. ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
+  } else if (isFlatInstallment) {
     // Flat Daily Installment loans (Daily + Fixed Term) collect a fixed
     // principal+interest bundle each day, starting today, for the full
     // entered duration — not a plain per-period interest figure.
@@ -111,6 +116,21 @@ export async function notifyLoanCreation({ borrower, principal, interestType, ra
     phone: borrower.phone,
     message: borrowerMsg,
     role: 'borrower'
+  });
+}
+
+/**
+ * Tells an admin that a cheque loan's cheque date is close, so they can get
+ * ready to deposit the cheque or collect the amount.
+ */
+export async function notifyChequeDue({ admin, borrowerName, chequeNumber, chequeBank, chequeDate, amountDue, daysUntil }) {
+  const when = daysUntil === 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
+  const chequeText = [chequeNumber && `cheque ${chequeNumber}`, chequeBank].filter(Boolean).join(', ') || 'cheque';
+  await sendNotification({
+    recipientName: admin.name,
+    phone: admin.phone,
+    message: `Cheque reminder: ${borrowerName}'s ${chequeText} is due ${when} (${chequeDate}). Amount to collect: LKR ${Number(amountDue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+    role: 'admin'
   });
 }
 

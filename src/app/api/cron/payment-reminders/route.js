@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runPaymentReminders, runMissedDailyCollectionAlerts } from '@/lib/services/reminders.js';
+import { runPaymentReminders, runMissedDailyCollectionAlerts, runChequeReminders } from '@/lib/services/reminders.js';
 import { runPawnReminders } from '@/lib/services/pawn.js';
 import { logError } from '@/lib/logger.js';
 
@@ -22,18 +22,25 @@ export async function GET(request) {
   }
 
   try {
-    const [reminderResults, missedDailyResults, pawnResults] = await Promise.all([
+    const [reminderResults, missedDailyResults, pawnResults, chequeResults] = await Promise.all([
       runPaymentReminders(),
       runMissedDailyCollectionAlerts(),
       runPawnReminders().catch((err) => {
         logError('Cron pawn reminders error', err, { method: request.method, url: request.url });
+        return [{ status: 'error', error: err.message }];
+      }),
+      // Isolated like pawn: a failure here (e.g. the cheque columns not migrated yet)
+      // must not stop the regular reminders.
+      runChequeReminders().catch((err) => {
+        logError('Cron cheque reminders error', err, { method: request.method, url: request.url });
         return [{ status: 'error', error: err.message }];
       })
     ]);
     return NextResponse.json({
       message: 'Scheduled payment reminders completed.',
       results: reminderResults,
-      missedDailyCollectionResults: missedDailyResults
+      missedDailyCollectionResults: missedDailyResults,
+      chequeResults
     });
   } catch (error) {
     logError('Cron payment reminders error', error, { method: request.method, url: request.url });

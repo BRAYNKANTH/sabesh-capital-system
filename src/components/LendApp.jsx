@@ -498,6 +498,11 @@ export default function LendApp() {
     photo_proofs: [],
     collection_mode: 'open_ended',
     duration_periods: '',
+    // 'standard' or 'cheque' (a post-dated cheque is left; cheque_date is its last date).
+    loan_type: 'standard',
+    cheque_number: '',
+    cheque_bank: '',
+    cheque_date: '',
     // Admin-only backdating — defaults to today; ignored server-side for
     // agent submissions (those go through approval, which always uses the
     // actual approval moment). See LOAN SCHEDULING DETAILS in step 3.
@@ -2096,7 +2101,15 @@ export default function LendApp() {
       errors.interest_rate = "Interest rate must be a non-negative number.";
       if (!firstErrorField) firstErrorField = "interest_rate";
     }
-    if (newLoan.collection_mode === 'fixed_term' && (!newLoan.duration_periods || parseInt(newLoan.duration_periods, 10) <= 0)) {
+    if (newLoan.loan_type === 'cheque') {
+      if (!newLoan.cheque_date) {
+        errors.cheque_date = "Enter the cheque's last date.";
+        if (!firstErrorField) firstErrorField = "cheque_date";
+      } else if (newLoan.cheque_date < (newLoan.disbursement_date || todayLocalDateStr())) {
+        errors.cheque_date = "The cheque date cannot be before the date the loan is issued.";
+        if (!firstErrorField) firstErrorField = "cheque_date";
+      }
+    } else if (newLoan.collection_mode === 'fixed_term' && (!newLoan.duration_periods || parseInt(newLoan.duration_periods, 10) <= 0)) {
       errors.duration_periods = "Duration period is required for fixed term loans.";
       if (!firstErrorField) firstErrorField = "duration_periods";
     } else if (newLoan.interest_type === 'daily' && newLoan.collection_mode === 'fixed_term' && parseInt(newLoan.duration_periods, 10) % 31 !== 0) {
@@ -2213,6 +2226,7 @@ export default function LendApp() {
     try {
       const payload = {
         ...newLoan,
+        ...(newLoan.loan_type === 'cheque' ? { interest_type: 'monthly', collection_mode: 'cheque' } : {}),
         borrower_date_of_birth: newLoan.date_of_birth,
         guarantors: includeGuarantor ? guarantorForms : [],
         borrower_profile: borrowerProfileForm
@@ -2239,6 +2253,10 @@ export default function LendApp() {
         photo_proofs: [],
         collection_mode: 'open_ended',
         duration_periods: '',
+        loan_type: 'standard',
+        cheque_number: '',
+        cheque_bank: '',
+        cheque_date: '',
         disbursement_date: todayLocalDateStr(),
         source_intake_id: null
       });
@@ -3004,12 +3022,19 @@ export default function LendApp() {
                 The loan is considered fully settled once all {loanStatement.loan.duration_periods || 0} days' installments have been paid in full.
               </p>
             ) : (
+              loanStatement.loan.collection_mode === 'cheque' ? (
+              <p style={{ fontSize: '14px' }}>
+                Interest is charged once, at <strong>{loanStatement.loan.interest_rate}%</strong> of the principal for the whole period. The full amount is due on the cheque's last date,{' '}
+                <strong>{loanStatement.loan.maturity_date ? new Date(loanStatement.loan.maturity_date).toLocaleDateString('en-GB', { timeZone: 'Asia/Colombo' }) : 'as agreed'}</strong>.
+              </p>
+              ) : (
               <p style={{ fontSize: '14px' }}>
                 Interest is charged at <strong>{loanStatement.loan.interest_rate}%</strong> of the principal, payable every <strong>{loanStatement.loan.interest_type === 'daily' ? 'day' : loanStatement.loan.interest_type === 'weekly' ? 'week' : 'month'}</strong>.
                 The principal amount remains payable in full (or in part, at the Borrower's discretion) at any time; the loan is considered
                 settled once the full principal of LKR {parseFloat(loanStatement.loan.principal_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} has been repaid, regardless of the
                 interest payment schedule.
               </p>
+              )
             )}
 
             {loanStatement.loan.loan_purpose && (
@@ -6404,20 +6429,33 @@ export default function LendApp() {
                                 {validationErrors.principal_amount && <span style={{ color: 'var(--accent-rose)', fontSize: '12px', marginTop: '4px', display: 'block', fontWeight: '500' }}>{validationErrors.principal_amount}</span>}
                               </div>
 
+                              {user.role === 'admin' && (
+                                <div>
+                                  <span style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Loan Type</span>
+                                  <div role="group" aria-label="Loan type" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {[['standard', 'Regular loan'], ['cheque', 'Cheque loan']].map(([k, label]) => (
+                                      <button key={k} type="button" aria-pressed={newLoan.loan_type === k}
+                                        className={`glass-btn ${newLoan.loan_type === k ? 'glass-btn-emerald' : 'glass-btn-secondary'}`}
+                                        style={{ padding: '10px 18px' }} onClick={() => { setNewLoan(prev => ({ ...prev, loan_type: k })); clearFieldError('cheque_date'); }}>{label}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                 <div>
-                                  <label htmlFor="interest_rate" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Interest Rate (%) *</label>
+                                  <label htmlFor="interest_rate" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>{newLoan.loan_type === 'cheque' ? 'Interest for the whole period (%) *' : 'Interest Rate (%) *'}</label>
                                   <input id="interest_rate" type="number" step="0.01" min="0" className="glass-input" style={{ borderColor: validationErrors.interest_rate ? 'var(--accent-rose)' : '', borderWidth: validationErrors.interest_rate ? '2px' : '' }} placeholder="2.00" value={newLoan.interest_rate} onChange={e => { setNewLoan(prev => ({ ...prev, interest_rate: e.target.value })); clearFieldError('interest_rate'); }} />
                                   {validationErrors.interest_rate && <span style={{ color: 'var(--accent-rose)', fontSize: '12px', marginTop: '4px', display: 'block', fontWeight: '500' }}>{validationErrors.interest_rate}</span>}
                                 </div>
-                                <div>
+                                {newLoan.loan_type !== 'cheque' && <div>
                                   <label htmlFor="f-accrual-frequency-5503" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Accrual Frequency</label>
                                   <select id="f-accrual-frequency-5503" required className="glass-input" value={newLoan.interest_type} onChange={e => setNewLoan(prev => ({ ...prev, interest_type: e.target.value }))}>
                                     <option value="daily">Daily Accumulation</option>
                                     <option value="weekly">Weekly Accumulation</option>
                                     <option value="monthly">Monthly Accumulation</option>
                                   </select>
-                                </div>
+                                </div>}
                               </div>
 
                               {user.role !== 'agent' && (
@@ -6433,6 +6471,41 @@ export default function LendApp() {
                                 </div>
                               )}
 
+                              {newLoan.loan_type === 'cheque' ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                  <div>
+                                    <label htmlFor="cheque_number" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Cheque Number</label>
+                                    <input id="cheque_number" className="glass-input" maxLength={50} placeholder="e.g. 004512" value={newLoan.cheque_number} onChange={e => setNewLoan(prev => ({ ...prev, cheque_number: e.target.value }))} />
+                                  </div>
+                                  <div>
+                                    <label htmlFor="cheque_bank" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Bank</label>
+                                    <input id="cheque_bank" className="glass-input" maxLength={100} placeholder="e.g. Commercial Bank" value={newLoan.cheque_bank} onChange={e => setNewLoan(prev => ({ ...prev, cheque_bank: e.target.value }))} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label htmlFor="cheque_date" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Cheque Last Date *</label>
+                                  <TypedDateInput id="cheque_date" value={newLoan.cheque_date} onChange={e => { setNewLoan(prev => ({ ...prev, cheque_date: e.target.value })); clearFieldError('cheque_date'); }} />
+                                  {validationErrors.cheque_date && <span style={{ color: 'var(--accent-rose)', fontSize: '12px', marginTop: '4px', display: 'block', fontWeight: '500' }}>{validationErrors.cheque_date}</span>}
+                                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                    Everything is due on this date. The admins get an SMS reminder 2 days before.
+                                  </p>
+                                </div>
+                                {newLoan.principal_amount > 0 && newLoan.interest_rate !== '' && (() => {
+                                  const p = parseFloat(newLoan.principal_amount) || 0;
+                                  const r = parseFloat(newLoan.interest_rate) || 0;
+                                  const interest = p * (r / 100);
+                                  return (
+                                    <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '12px 14px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Interest ({r}% for the whole period):</span><strong>LKR {interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-light)', paddingTop: '4px', marginTop: '2px' }}><span style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>Total due on the cheque date:</span><strong style={{ color: 'var(--accent-emerald)' }}>LKR {(p + interest).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+
+                              ) : (
+                              <>
                               <div className="form-grid-2-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                 <div>
                                   <label htmlFor="f-loan-term-5530" style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Loan Term</label>
@@ -6492,6 +6565,9 @@ export default function LendApp() {
                                     })()}
                                   </p>
                                 ))}
+
+                              </>
+                              )}
 
                               {user.role === 'agent' ? (
                                 <div style={{ padding: '12px 14px', background: 'var(--accent-blue-light)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -7417,8 +7493,15 @@ export default function LendApp() {
                   </p>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0' }}>
                     Loan Term: <strong style={{ textTransform: 'capitalize' }}>
-                      {loanStatement.loan.collection_mode === 'fixed_term' ? 'Fixed Term' : 'Open-Ended'}
+                      {loanStatement.loan.collection_mode === 'cheque' ? 'Cheque Loan' : loanStatement.loan.collection_mode === 'fixed_term' ? 'Fixed Term' : 'Open-Ended'}
                     </strong>
+                    {loanStatement.loan.collection_mode === 'cheque' && (
+                      <>
+                        {loanStatement.loan.cheque_number && <>{' '}| Cheque No: <strong>{loanStatement.loan.cheque_number}</strong></>}
+                        {loanStatement.loan.cheque_bank && <>{' '}| Bank: <strong>{loanStatement.loan.cheque_bank}</strong></>}
+                        {loanStatement.loan.maturity_date && <>{' '}| Cheque Last Date: <strong>{new Date(loanStatement.loan.maturity_date).toLocaleDateString('en-GB', { timeZone: 'Asia/Colombo' })}</strong></>}
+                      </>
+                    )}
                     {loanStatement.loan.collection_mode === 'fixed_term' && loanStatement.loan.maturity_date && (
                       <>
                         {' '}| Maturity: <strong>{new Date(loanStatement.loan.maturity_date).toLocaleDateString()}</strong>
@@ -9295,7 +9378,7 @@ function LoansLoader({ onSelect, onQuickPay, fetchTrigger }) {
                       <td style={{ padding: '12px 14px', fontWeight: '700', whiteSpace: 'nowrap' }}>LKR {parseFloat(loan.principal_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{ background: (typeColor[loan.interest_type] || '#666') + '22', color: typeColor[loan.interest_type] || 'var(--text-secondary)', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
-                          {loan.interest_type}
+                          {loan.collection_mode === 'cheque' ? 'cheque' : loan.interest_type}
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{loan.interest_rate}%</td>
@@ -9366,7 +9449,7 @@ function LoansLoader({ onSelect, onQuickPay, fetchTrigger }) {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                       <span className={`status-pill ${isActive ? 'status-pill-active' : isPaid ? 'status-pill-paid' : isPending ? 'status-pill-pending' : isRejected ? 'status-pill-rejected' : 'status-pill-defaulted'}`}><span className="status-pill-dot" />{isActive ? 'Active' : isPaid ? 'Paid' : isPending ? 'Pending' : isRejected ? 'Rejected' : loan.status}</span>
-                      <span style={{ background: (typeColor[loan.interest_type] || '#666') + '22', color: typeColor[loan.interest_type], padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{loan.interest_type}</span>
+                      <span style={{ background: (typeColor[loan.interest_type] || '#666') + '22', color: typeColor[loan.interest_type], padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', textTransform: 'capitalize' }}>{loan.collection_mode === 'cheque' ? 'cheque' : loan.interest_type}</span>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>

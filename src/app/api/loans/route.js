@@ -27,11 +27,31 @@ export async function POST(request) {
     const authUser = await requireAuth(request, ['admin', 'agent']);
     const isAgentSubmission = authUser.role === 'agent';
     const body = await request.json();
-    const {
+    let {
       borrower_name, borrower_phone, borrower_address, borrower_date_of_birth, principal_amount, interest_rate, interest_type,
       assigned_agent_id, nic_number, nic_photos, photo_proofs, guarantor, guarantors, borrower_profile,
-      collection_mode, duration_periods, borrower_email, borrower_gender, source_intake_id, disbursement_date
+      collection_mode, duration_periods, borrower_email, borrower_gender, source_intake_id, disbursement_date,
+      loan_type, cheque_number, cheque_bank, cheque_date
     } = body;
+
+    // Cheque loan: the borrower leaves a post-dated cheque. One flat interest rate
+    // covers the whole period and everything is due on the cheque's last date.
+    // Admin-issued only — an agent's submission would go through approval, which
+    // does not know about cheques.
+    const isCheque = loan_type === 'cheque';
+    let chequeDateValue = null;
+    if (isCheque) {
+      if (isAgentSubmission) {
+        return NextResponse.json({ message: 'Only an admin can issue a cheque loan.' }, { status: 403 });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cheque_date || '') || isNaN(Date.parse(cheque_date))) {
+        return NextResponse.json({ message: 'Enter the cheque date (the last date) for a cheque loan.' }, { status: 400 });
+      }
+      // Midnight in Sri Lanka, so the date reads the same wherever the server runs.
+      chequeDateValue = new Date(`${cheque_date}T00:00:00+05:30`);
+      interest_type = 'monthly';
+      collection_mode = 'cheque';
+    }
 
     // Matches Skyloan's bar — Name, Phone, NIC, principal, rate, interest
     // type. Address, DOB, KYC photos, and the profile step (loan purpose/
@@ -81,7 +101,7 @@ export async function POST(request) {
     }
 
     const colMode = collection_mode || 'open_ended';
-    if (!['open_ended', 'fixed_term'].includes(colMode)) {
+    if (!['open_ended', 'fixed_term', ...(isCheque ? ['cheque'] : [])].includes(colMode)) {
       return NextResponse.json({ message: 'Invalid collection mode.' }, { status: 400 });
     }
 
@@ -110,7 +130,7 @@ export async function POST(request) {
     // how the client's agents actually collect in the field, and is
     // fundamentally different from the interest-only model every other
     // loan type (Weekly, Monthly, and Open-Ended Daily) still uses.
-    const isFlatInstallment = interest_type === 'daily' && colMode === 'fixed_term';
+    const isFlatInstallment = !isCheque && interest_type === 'daily' && colMode === 'fixed_term';
     let dailyInstallmentAmount = null;
     let principalPerDay = null;
     let interestPerDay = null;
@@ -349,11 +369,15 @@ export async function POST(request) {
     const borrower_id = borrower.id;
 
     const creationDate = disbursementDateOverride || new Date();
+    if (isCheque && chequeDateValue < new Date(`${creationDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Colombo' })}T00:00:00+05:30`)) {
+      return NextResponse.json({ message: 'The cheque date cannot be before the date the loan is issued.' }, { status: 400 });
+    }
+    const chequeInterest = isCheque ? Math.round(principal * rate) / 100 : 0;
     // For a pending application this is a placeholder — approval recomputes
     // it from the actual approval moment, since interest shouldn't accrue
     // while the loan is just sitting in the review queue.
-    const nextAccrualDate = addInterval(creationDate, interest_type);
-    let calculatedMaturityDate = null;
+    const nextAccrualDate = isCheque ? chequeDateValue : addInterval(creationDate, interest_type);
+    let calculatedMaturityDate = isCheque ? chequeDateValue : null;
     if (colMode === 'fixed_term') {
       // Flat installment collection starts ON the disbursement day (day 0
       // is the first of the `periods` collection days), so the last
@@ -409,7 +433,7 @@ export async function POST(request) {
             interest_rate: rate,
             interest_type,
             principal_outstanding: principal,
-            interest_balance: isFlatInstallment ? initialInterestBalance : 0,
+            interest_balance: isFlatInstallment ? initialInterestBalance : chequeInterest,
             is_flat_installment: isFlatInstallment,
             daily_installment_amount: dailyInstallmentAmount,
             principal_per_day: principalPerDay,
@@ -429,6 +453,7 @@ export async function POST(request) {
             duration_periods: periods,
             maturity_date: calculatedMaturityDate,
             reference_number: refNumber,
+            ...(isCheque ? { cheque_number: cheque_number?.trim() || null, cheque_bank: cheque_bank?.trim() || null } : {}),
             ...(borrowerProfileRecord || {})
           }).returning('*');
 
@@ -447,6 +472,19 @@ export async function POST(request) {
               { loan_id: loanId, account: 'loan_receivable_principal', type: 'debit', amount: principal, created_at: creationDate },
               { loan_id: loanId, account: 'cash_office', type: 'credit', amount: principal, created_at: creationDate }
             ]);
+            // A cheque loan's interest is owed from day one, so book it now like an
+            // accrual would — payments later credit this same receivable.
+            if (isCheque && chequeInterest > 0) {
+              await trx('ledger_entries').insert([
+                { loan_id: loanId, account: 'loan_receivable_interest', type: 'debit', amount: chequeInterest, created_at: creationDate },
+                { loan_id: loanId, account: 'interest_revenue', type: 'credit', amount: chequeInterest, created_at: creationDate }
+              ]);
+              await trx('interest_accruals').insert({
+                loan_id: loanId,
+                amount_accrued: chequeInterest,
+                calculation_log: `Cheque loan | Principal: ${principal} | Interest for the whole period: ${rate}% | Cheque date: ${cheque_date}`
+              });
+            }
           }
 
           if (guarantorRecords.length > 0) {
@@ -457,7 +495,7 @@ export async function POST(request) {
           await trx('audit_logs').insert({
             actor_id: authUser.id,
             action_type: isAgentSubmission ? 'SUBMIT_LOAN_APPLICATION' : 'CREATE_LOAN',
-            description: `${isAgentSubmission ? 'Submitted for approval: a' : 'Created'} new loan of LKR ${principal.toLocaleString()} (NIC: ${cleanNIC}, Rate: ${rate}%, Frequency: ${interest_type})${guarantorNames.length > 0 ? ` with guarantor(s) '${guarantorNames.join("', '")}'` : ''} for Borrower ID ${borrower_id}.`
+            description: `${isAgentSubmission ? 'Submitted for approval: a' : 'Created'} new ${isCheque ? `cheque loan (cheque date ${cheque_date}${cheque_number ? `, no. ${cheque_number}` : ''}) ` : 'loan '}of LKR ${principal.toLocaleString()} (NIC: ${cleanNIC}, Rate: ${rate}%${isCheque ? ' for the whole period' : `, Frequency: ${interest_type}`})${guarantorNames.length > 0 ? ` with guarantor(s) '${guarantorNames.join("', '")}'` : ''} for Borrower ID ${borrower_id}.`
           });
 
           return newLoan;
@@ -485,7 +523,8 @@ export async function POST(request) {
         rate,
         isFlatInstallment,
         dailyInstallmentAmount,
-        durationPeriods: periods
+        durationPeriods: periods,
+        cheque: isCheque ? { chequeDate: cheque_date } : null
       }).catch((err) => logError('Failed to dispatch notification', err, { method: request.method, url: request.url }));
     }
 

@@ -87,6 +87,13 @@ async function runIncrementalMigrations() {
   // Borrower profile snapshot at time of loan application (mirrors the STN
   // applicant personal-info form) — optional, per-loan like the guarantor.
   await addColumnIfMissing('loans', 'loan_purpose', (t) => t.text('loan_purpose').nullable());
+
+  // Cheque loans (collection_mode = 'cheque'): the borrower leaves a post-dated cheque.
+  // The cheque's last date is stored in maturity_date; the whole-period interest is set
+  // when the loan is issued. cheque_reminder_sent_at stops the 2-days-before SMS repeating.
+  await addColumnIfMissing('loans', 'cheque_number', (t) => t.string('cheque_number', 50).nullable());
+  await addColumnIfMissing('loans', 'cheque_bank', (t) => t.string('cheque_bank', 100).nullable());
+  await addColumnIfMissing('loans', 'cheque_reminder_sent_at', (t) => t.timestamp('cheque_reminder_sent_at').nullable());
   await addColumnIfMissing('loans', 'dependents_count', (t) => t.integer('dependents_count').nullable());
   await addColumnIfMissing('loans', 'monthly_income', (t) => t.decimal('monthly_income', 15, 2).nullable());
   await addColumnIfMissing('loans', 'spouse_name', (t) => t.string('spouse_name', 150).nullable());
@@ -601,6 +608,8 @@ async function runIncrementalMigrations() {
     });
     console.log("Migration: created table 'salary_entries'.");
   }
+  // Money given to the employee ahead of salary; counts towards the row's net.
+  await addColumnIfMissing('salary_entries', 'advance', (t) => t.decimal('advance', 15, 2).notNullable().defaultTo(0));
 
   if (!(await db.schema.hasTable('salary_entry_allowances'))) {
     await db.schema.createTable('salary_entry_allowances', (table) => {

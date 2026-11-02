@@ -9,8 +9,8 @@ export class SalaryError extends Error {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-const EDITABLE = ['entry_date', 'agent_id', 'basic_salary', 'deduction', 'note'];
-const LABELS = { basic_salary: 'Basic salary', deduction: 'Deduction', amount: 'Allowance' };
+const EDITABLE = ['entry_date', 'agent_id', 'basic_salary', 'advance', 'deduction', 'note'];
+const LABELS = { basic_salary: 'Basic salary', advance: 'Advance', deduction: 'Deduction', amount: 'Allowance' };
 
 const tidyName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Colombo' });
@@ -61,7 +61,7 @@ const entryQuery = (k) => k('salary_entries as e')
   .join('users as u', 'u.id', 'e.agent_id')
   .select('e.id', 'e.agent_id', 'u.name as agent_name', 'e.status', 'e.note',
     k.raw("to_char(e.entry_date, 'YYYY-MM-DD') as entry_date"), k.raw("to_char(e.paid_on, 'YYYY-MM-DD') as paid_on"),
-    k.raw('e.basic_salary::float8 as basic_salary'), k.raw('e.deduction::float8 as deduction'));
+    k.raw('e.basic_salary::float8 as basic_salary'), k.raw('e.advance::float8 as advance'), k.raw('e.deduction::float8 as deduction'));
 
 // Adds each row's allowance lines, their total, and the net salary.
 async function finish(k, entries) {
@@ -74,7 +74,7 @@ async function finish(k, entries) {
   return entries.map((e) => {
     const allowances = lines.filter((l) => l.entry_id === e.id).map(({ entry_id, ...l }) => l);
     const allowance_total = round2(allowances.reduce((s, l) => s + l.amount, 0));
-    return { ...e, allowances, allowance_total, net: round2(e.basic_salary + allowance_total - e.deduction) };
+    return { ...e, allowances, allowance_total, net: round2(e.basic_salary + allowance_total + e.advance - e.deduction) };
   });
 }
 
@@ -115,12 +115,13 @@ async function requireType(typeId) {
   return t;
 }
 
-// One row per employee per month: further allowances go on that row.
+// One open (unpaid) row per employee per month: further allowances go on that row.
+// Once a row is marked Paid the employee can get a new row (another payment, an advance...).
 async function assertOneRowPerMonth(k, agent, entryDate, exceptId) {
   const [from, to] = monthBounds(entryDate.slice(0, 7));
-  const q = k('salary_entries').where('agent_id', agent.id).where('entry_date', '>=', from).where('entry_date', '<', to);
+  const q = k('salary_entries').where('agent_id', agent.id).where('status', 'pending').where('entry_date', '>=', from).where('entry_date', '<', to);
   if (exceptId) q.whereNot('id', exceptId);
-  if (await q.first('id')) throw new SalaryError(409, `${agent.name} already has a row for ${entryDate.slice(0, 7)}. Add the allowance on that row.`);
+  if (await q.first('id')) throw new SalaryError(409, `${agent.name} already has an unpaid row for ${entryDate.slice(0, 7)}. Add to that row, or mark it Paid first.`);
 }
 
 export async function createEntry(input, actorId) {
@@ -129,6 +130,7 @@ export async function createEntry(input, actorId) {
     entry_date: validDate(input.entry_date || today()),
     agent_id: agent.id,
     basic_salary: money(input.basic_salary, 'basic_salary'),
+    advance: money(input.advance, 'advance'),
     deduction: money(input.deduction, 'deduction'),
     note: typeof input.note === 'string' && input.note.trim() ? input.note.trim() : null,
     created_by: actorId
@@ -138,7 +140,7 @@ export async function createEntry(input, actorId) {
   const id = created.id ?? created;
   await db('audit_logs').insert({
     actor_id: actorId, action_type: 'SALARY_ENTRY_ADDED',
-    description: `Salary row for ${agent.name} on ${row.entry_date}: basic ${fmt(row.basic_salary)}, deduction ${fmt(row.deduction)}.`
+    description: `Salary row for ${agent.name} on ${row.entry_date}: basic ${fmt(row.basic_salary)}, advance ${fmt(row.advance)}, deduction ${fmt(row.deduction)}.`
   });
   return getEntry(db, id);
 }
@@ -164,7 +166,7 @@ export async function updateEntry(id, patch, actorId) {
       else if (key === 'agent_id') value = (await requireAgent(value)).id;
       else if (key === 'note') value = typeof value === 'string' && value.trim() ? value.trim() : null;
       else value = money(value, key);
-      const before = key === 'basic_salary' || key === 'deduction' ? Number(cur[key]) : cur[key];
+      const before = key === 'basic_salary' || key === 'advance' || key === 'deduction' ? Number(cur[key]) : cur[key];
       const same = key === 'entry_date' ? new Date(before).toLocaleDateString('sv-SE') === value : before === value || (before == null && value == null);
       if (!same) { updates[key] = value; changes.push(`${key}: ${before ?? '-'} -> ${value ?? '-'}`); }
     }

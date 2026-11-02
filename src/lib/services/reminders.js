@@ -1,5 +1,5 @@
 import db from '../db.js';
-import { notifyPaymentReminder, notifyMissedDailyCollection } from './notification.js';
+import { notifyPaymentReminder, notifyMissedDailyCollection, notifyChequeDue } from './notification.js';
 import { getSriLankaTodayRange } from '../loanSchedule.js';
 import { logError } from '../logger.js';
 
@@ -37,6 +37,7 @@ export async function runPaymentReminders() {
     .where('loans.status', 'active')
     .andWhere('loans.interest_balance', '>', 0)
     .andWhere('loans.is_flat_installment', false)
+    .andWhereNot('loans.collection_mode', 'cheque')
     .andWhereNot('loans.interest_type', 'daily')
     .whereNotNull('loans.next_accrual_date')
     .select(
@@ -77,6 +78,62 @@ export async function runPaymentReminders() {
     }
   }
 
+  return results;
+}
+
+/**
+ * Texts every active admin when a cheque loan's cheque date is 2 days away (or
+ * closer, if that day's run was missed). Sent once per loan: cheque_reminder_sent_at
+ * is stamped after the send so the next daily run skips it. Loans that are
+ * already paid off, or whose cheque date has passed, are not reminded.
+ */
+export const CHEQUE_REMINDER_DAYS = 2;
+
+export async function runChequeReminders() {
+  console.log('Running cheque reminder checks...');
+  const loans = await db('loans')
+    .join('users as borrowers', 'loans.borrower_id', 'borrowers.id')
+    .where('loans.collection_mode', 'cheque')
+    .andWhere('loans.status', 'active')
+    .whereNull('loans.cheque_reminder_sent_at')
+    .whereNotNull('loans.maturity_date')
+    .select('loans.id', 'loans.cheque_number', 'loans.cheque_bank', 'loans.maturity_date',
+      'loans.principal_outstanding', 'loans.interest_balance', 'borrowers.name as borrower_name', 'borrowers.phone as borrower_phone');
+  if (!loans.length) return [];
+
+  const admins = await db('users').where({ role: 'admin', is_active: true }).select('name', 'phone');
+  const dayOf = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Asia/Colombo' });
+  const todayStr = dayOf(new Date());
+  const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+
+  const results = [];
+  for (const loan of loans) {
+    const chequeDay = dayOf(loan.maturity_date);
+    const daysUntil = daysBetween(todayStr, chequeDay);
+    if (daysUntil > CHEQUE_REMINDER_DAYS || daysUntil < 0) {
+      results.push({ loanId: loan.id, status: 'skipped', daysUntil });
+      continue;
+    }
+    try {
+      for (const admin of admins) {
+        if (!admin.phone) continue;
+        await notifyChequeDue({
+          admin,
+          borrowerName: loan.borrower_name,
+          chequeNumber: loan.cheque_number,
+          chequeBank: loan.cheque_bank,
+          chequeDate: chequeDay,
+          amountDue: (parseFloat(loan.principal_outstanding) || 0) + (parseFloat(loan.interest_balance) || 0),
+          daysUntil
+        });
+      }
+      await db('loans').where({ id: loan.id }).update({ cheque_reminder_sent_at: db.fn.now() });
+      results.push({ loanId: loan.id, status: 'sent', daysUntil });
+    } catch (err) {
+      logError('Error sending cheque reminder', err, { loanId: loan.id });
+      results.push({ loanId: loan.id, status: 'error', error: err.message });
+    }
+  }
   return results;
 }
 
