@@ -14,7 +14,7 @@ const shiftMonth = (m, by) => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 const monthLabel = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-const netOf = (e) => Math.round(((+e.basic_salary || 0) + (+e.allowance_amount || 0) - (+e.deduction || 0)) * 100) / 100;
+const netOf = (e) => Math.round(((+e.basic_salary || 0) + (+e.allowance_total || 0) - (+e.deduction || 0)) * 100) / 100;
 
 const NEW_TYPE = '__new__';
 
@@ -42,7 +42,7 @@ function MoneyInput({ value, disabled, label, onSave, width = '110px' }) {
 }
 
 // Allowance type dropdown, with "+ Add new type…" which turns into a small name box.
-function TypeSelect({ value, types, disabled, label, onPick, onCreate }) {
+function TypeSelect({ value, types, usedIds = [], disabled, label, onPick, onCreate }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,9 +73,49 @@ function TypeSelect({ value, types, disabled, label, onPick, onCreate }) {
     <select className="glass-input" aria-label={label} disabled={disabled} value={value || ''} style={{ width: '170px', padding: '6px 8px' }}
       onChange={(e) => (e.target.value === NEW_TYPE ? setAdding(true) : onPick(e.target.value || null))}>
       <option value="">Allowance type…</option>
-      {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      {types.map((t) => <option key={t.id} value={t.id} disabled={usedIds.includes(t.id) && t.id !== value}>{t.name}</option>)}
       <option value={NEW_TYPE}>+ Add new type…</option>
     </select>
+  );
+}
+
+// The Allowances cell: one line per allowance (type + amount), "+ Add allowance" for another,
+// and the running total underneath.
+function AllowanceLines({ entry, types, locked, who, onAdd, onChange, onRemove, onCreateType }) {
+  const [adding, setAdding] = useState(false);
+  const used = entry.allowances.map((l) => l.type_id);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+      {entry.allowances.map((l) => (
+        <div key={l.id} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <TypeSelect value={l.type_id} types={types} usedIds={used} disabled={locked} label={`Allowance type for ${who}`}
+            onPick={(id) => id && onChange(l, { type_id: id })}
+            onCreate={async (name) => { const t = await onCreateType(name); if (t) await onChange(l, { type_id: t.id }); return !!t; }} />
+          <MoneyInput value={l.amount} disabled={locked} label={`${l.type_name} amount for ${who}`} onSave={(v) => onChange(l, { amount: v })} width="100px" />
+          {!locked && (
+            <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}
+              aria-label={`Remove ${l.type_name} for ${who}`} onClick={() => onRemove(l)}>✕</button>
+          )}
+        </div>
+      ))}
+      {!locked && (adding ? (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <TypeSelect value="" types={types} usedIds={used} label={`New allowance type for ${who}`}
+            onPick={async (id) => { if (id) { setAdding(false); await onAdd(id); } }}
+            onCreate={async (name) => { const t = await onCreateType(name); if (t) { setAdding(false); await onAdd(t.id); } return !!t; }} />
+          <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} aria-label="Cancel" onClick={() => setAdding(false)}>✕</button>
+        </div>
+      ) : (
+        <button type="button" className="glass-btn glass-btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => setAdding(true)}>
+          <Plus className="icon" /> Add allowance
+        </button>
+      ))}
+      {entry.allowances.length > 0 && (
+        <div style={{ fontSize: '13px', fontWeight: 700, borderTop: '1px solid var(--border-light)', paddingTop: '6px', alignSelf: 'stretch', textAlign: 'right' }}>
+          Total allowances: {num(entry.allowance_total)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -123,7 +163,7 @@ export default function SalaryPortal({ showToast, onBack }) {
 
   const startDraft = () => setDraft({
     entry_date: month === todayStr().slice(0, 7) ? todayStr() : `${month}-01`,
-    agent_id: filters.agent_id, basic_salary: 0, allowance_type_id: filters.type_id || null, allowance_amount: 0, deduction: 0
+    agent_id: filters.agent_id, basic_salary: 0, deduction: 0, allowances: [], allowance_total: 0
   });
 
   // Edit a saved row.
@@ -136,6 +176,20 @@ export default function SalaryPortal({ showToast, onBack }) {
       load(); // put the row back to what is saved
     }
   };
+
+  // Allowance lines of a saved row.
+  const lineCall = async (entry, call) => {
+    try {
+      const res = await call();
+      replace(res.entry);
+    } catch (err) {
+      showToast(err.message, 'error');
+      load();
+    }
+  };
+  const addLine = (entry, type_id) => lineCall(entry, () => api.post(`/salary/entries/${entry.id}/allowances`, { type_id, amount: 0 }));
+  const changeLine = (entry, line, patch) => lineCall(entry, () => api.patch(`/salary/entries/${entry.id}/allowances/${line.id}`, patch));
+  const removeLine = (entry, line) => lineCall(entry, () => api.delete(`/salary/entries/${entry.id}/allowances/${line.id}`));
 
   // Edit the new row; it is saved the moment an employee is chosen.
   const patchDraft = async (patch) => {
@@ -202,17 +256,17 @@ export default function SalaryPortal({ showToast, onBack }) {
           <select className="glass-input" aria-label="Employee name" disabled={locked} value={rec.agent_id || ''}
             onChange={(e) => e.target.value && edit({ agent_id: e.target.value })} style={{ width: '170px', padding: '6px 8px' }}>
             <option value="">Choose employee…</option>
-            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            {agents.filter((a) => !isDraft || !entries.some((e) => e.agent_id === a.id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </td>
         <td style={td}><MoneyInput value={rec.basic_salary} disabled={locked} label={`Basic salary for ${who}`} onSave={(v) => edit({ basic_salary: v })} /></td>
         <td style={td}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-            <TypeSelect value={rec.allowance_type_id} types={types} disabled={locked} label={`Allowance type for ${who}`}
-              onPick={(id) => edit({ allowance_type_id: id })}
-              onCreate={async (name) => { const t = await addTypeByName(name); if (t) await edit({ allowance_type_id: t.id }); return !!t; }} />
-            <MoneyInput value={rec.allowance_amount} disabled={locked} label={`Allowance amount for ${who}`} onSave={(v) => edit({ allowance_amount: v })} />
-          </div>
+          {isDraft ? (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Choose the employee, then add allowances</span>
+          ) : (
+            <AllowanceLines entry={rec} types={types} locked={locked} who={who}
+              onAdd={(typeId) => addLine(rec, typeId)} onChange={(l, patch) => changeLine(rec, l, patch)} onRemove={(l) => removeLine(rec, l)} onCreateType={addTypeByName} />
+          )}
         </td>
         <td style={td}><MoneyInput value={rec.deduction} disabled={locked} label={`Deductions for ${who}`} onSave={(v) => edit({ deduction: v })} /></td>
         <td style={{ ...td, fontWeight: 700, paddingTop: '14px' }}>{netOf(rec) ? num(netOf(rec)) : '–'}</td>
@@ -254,7 +308,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         )}
         <div>
           <h2 style={{ fontSize: '28px', margin: 0 }}>Monthly Salary Table</h2>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Pick the employee and allowance type in each row, type the amounts, press Paid when you give it.</span>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>One row per employee: add as many allowances as needed and the total updates. Press Paid when you give it.</span>
         </div>
       </div>
 
@@ -331,7 +385,7 @@ export default function SalaryPortal({ showToast, onBack }) {
                 <td style={{ ...td, borderBottom: 'none' }} />
                 <td style={{ ...td, ...left, fontWeight: 700, borderBottom: 'none' }}>Total</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('basic_salary'))}</td>
-                <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('allowance_amount'))}</td>
+                <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('allowance_total'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('deduction'))}</td>
                 <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>{num(sum('net'))}</td>
                 <td style={{ ...td, borderBottom: 'none' }} />
@@ -347,7 +401,7 @@ export default function SalaryPortal({ showToast, onBack }) {
         </button>
       </div>
       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        Net Salary = basic salary + allowance − deductions. A new row is saved as soon as you choose the employee. For money an agent spent themselves (for example petrol), add a row with that allowance and press Paid when you give it back.
+        Net Salary = basic salary + allowance − deductions. A new row is saved as soon as you choose the employee. For money an agent spent themselves (for example petrol), add that allowance on their row and press Paid when you give it back.
       </div>
     </div>
   );
