@@ -29,7 +29,8 @@ export default async function manifest() {
     name: orgName,
     short_name: orgName.length > 20 ? orgName.slice(0, 17) + '…' : orgName,
     description: 'Cash Lending & Agent Collection Management System',
-    start_url: '/',
+    // Opens the app's sign-in; plain '/' is the public landing page for visitors.
+    start_url: '/?login=1',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
