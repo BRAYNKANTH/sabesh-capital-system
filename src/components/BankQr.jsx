@@ -3,17 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { Download } from 'lucide-react';
 import QRCode from 'qrcode';
+import { publicSiteUrl } from '@/lib/siteUrl.js';
 import styles from './landing.module.css';
 
-// A QR code that opens the public bank-details page (/pay). It is built in the browser from the
-// address this site is served from, or from NEXT_PUBLIC_SITE_URL when that is set (so a QR made
-// while testing on localhost can't end up printed with the wrong address).
+// A QR code that opens the public bank-details page (/pay). It always points at the live site, even
+// when this page is opened on localhost or a local network address (see lib/siteUrl.js).
 export default function BankQr() {
   const [image, setImage] = useState('');
   const [url, setUrl] = useState('');
 
   useEffect(() => {
-    const base = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/+$/, '');
+    const base = publicSiteUrl({ envUrl: process.env.NEXT_PUBLIC_SITE_URL, hostname: window.location.hostname, origin: window.location.origin });
     const target = `${base}/pay`;
     setUrl(target);
     let cancelled = false;
