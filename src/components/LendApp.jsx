@@ -7,6 +7,7 @@ import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
 import SalaryPortal from './SalaryPortal.jsx';
 import { openWhatsApp, appendBankDetails } from '@/lib/whatsapp.js';
+import { nextRoundSuggestion } from '@/lib/chitNextRound.js';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
@@ -4161,6 +4162,18 @@ export default function LendApp() {
                               <input id="f-next-round-date-3458" required type="date" className="glass-input" value={auctionForm.next_round_date} onChange={e => setAuctionForm(prev => ({ ...prev, next_round_date: e.target.value }))} />
                             </div>
                           </div>
+                          {(() => {
+                            if (auctionForm.bid_amount === '' || !auctionForm.auction_date) return null;
+                            const s = nextRoundSuggestion(auctionForm.auction_date, selectedTicket.total_value, auctionForm.bid_amount);
+                            if (!s) return null;
+                            const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+                            return (
+                              <div aria-live="polite" style={{ fontSize: '12px', color: 'var(--accent-gold)', marginTop: '-6px' }}>
+                                ≈ {s.days} days after the auction
+                                {s.earlier && (s.earlier === s.later ? ` → ${fmt(s.earlier)}` : ` → ${fmt(s.earlier)} or ${fmt(s.later)}`)}
+                              </div>
+                            );
+                          })()}
 
                           {/* calculations preview */}
                           {parseFloat(auctionForm.bid_amount) >= 0 && (
