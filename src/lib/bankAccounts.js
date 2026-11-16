@@ -12,3 +12,18 @@ export const BANK_ACCOUNTS = [
   { id: 'sampath', label: 'sabesh sampath', bank: 'Sampath Bank PLC', accountNumber: '117152820232' },
   { id: 'hnb-jaffna', label: 'Manien', bank: 'Hatton National Bank PLC', holder: 'Sabeskaran T', branch: 'Jaffna Metro', accountNumber: '016020849741' }
 ];
+
+// The accounts as plain text for a WhatsApp message (Tamil heading, as the chit notices are Tamil),
+// ending with the link to the page where each number can be copied with one tap.
+// *text* is bold in WhatsApp.
+export function formatBankDetailsText(accounts = BANK_ACCOUNTS, payUrl) {
+  const blocks = accounts.map((a) => [
+    `*${a.bank}*`,
+    a.holder || null,
+    a.branch ? `${a.branch} branch` : null,
+    a.accountNumber
+  ].filter(Boolean).join('\n'));
+  const lines = ['🏦 வங்கி கணக்கு விவரங்கள்:', '', blocks.join('\n\n')];
+  if (payUrl) lines.push('', '📲 கணக்கு எண்களை நகலெடுக்க:', payUrl);
+  return lines.join('\n');
+}

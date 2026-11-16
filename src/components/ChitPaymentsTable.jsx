@@ -6,6 +6,7 @@ import ChitInstalmentBox from './ChitInstalmentBox.jsx';
 import ChitOverdueTag from './ChitOverdueTag.jsx';
 import { overdueDays } from '@/lib/services/chitOverdue.js';
 import { getSriLankaDateString } from '@/lib/loanSchedule.js';
+import { openWhatsApp } from '@/lib/whatsapp.js';
 
 const money = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Whole cents, so 0.1 + 0.2 style noise can never show as a balance.
@@ -34,7 +35,7 @@ function Contact({ phone }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
       <a href={`tel:${dial(phone)}`} className="phone-link" aria-label={`Call ${phone}`}>{phone}</a>
-      <a href={`https://wa.me/${whatsappNumber(phone)}`} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp chit-hit" title="Chat on WhatsApp" aria-label={`WhatsApp ${phone}`}>
+      <a href={`https://wa.me/${whatsappNumber(phone)}`} onClick={(e) => { e.preventDefault(); openWhatsApp({ phone: whatsappNumber(phone) }); }} target="_blank" rel="noopener noreferrer" className="quick-contact-btn whatsapp chit-hit" title="Chat on WhatsApp" aria-label={`WhatsApp ${phone}`}>
         <MessageSquare style={{ width: '12px', height: '12px' }} aria-hidden="true" />
       </a>
     </span>

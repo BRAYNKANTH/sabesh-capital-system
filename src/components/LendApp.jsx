@@ -6,6 +6,7 @@ import { submitPaymentOrQueue, syncQueuedPayments, getQueueCount, onQueueChanged
 import { TypedDateInput } from './TypedDateInput.jsx';
 import PawnPortal from './PawnPortal.jsx';
 import SalaryPortal from './SalaryPortal.jsx';
+import { openWhatsApp, appendBankDetails } from '@/lib/whatsapp.js';
 import { MemberDetailsFields, GuarantorFields, EMPTY_MEMBER_DETAILS } from './ChitMemberFields.jsx';
 import ChitMemberDetailsTab from './ChitMemberDetailsTab.jsx';
 import ChitCollectionsPanel from './ChitCollectionsPanel.jsx';
@@ -4218,7 +4219,7 @@ export default function LendApp() {
                     <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       <div>
                         <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}><MessageSquare className="icon" style={{ color: '#25D366' }} /> Tamil WhatsApp Notice</h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px', marginBottom: 0 }}>Forward notice text directly to your WhatsApp group.</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px', marginBottom: 0 }}>Forward notice text directly to your WhatsApp group. The bank details are added at the bottom.</p>
                       </div>
 
                       {/* 1. Last Completed Round Notice */}
@@ -4241,21 +4242,19 @@ export default function LendApp() {
                           `ரூ ${finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
                           `📅 ${roundNum + 1}ம் சீட்டு திகதி:\n` +
                           `${nextDateStr}`;
+                        const noticeMessage = appendBankDetails(noticeText);
 
                         return (
                           <div style={{ border: '1px solid var(--border-light)', borderRadius: '12px', padding: '16px', background: 'rgba(255,255,255,0.02)' }}>
                             <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--accent-emerald)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>📢 Last Completed Round {roundNum} Notice</span>
                             <div style={{ background: '#075e54', color: 'white', borderRadius: '8px', padding: '12px', fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px solid #128c7e', marginBottom: '10px' }}>
-                              {noticeText}
+                              {noticeMessage}
                             </div>
                             <button
                               type="button"
                               className="glass-btn"
                               style={{ width: '100%', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', backgroundColor: '#25D366', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '12px' }}
-                              onClick={() => {
-                                const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(noticeText)}`;
-                                window.open(url, '_blank');
-                              }}
+                              onClick={() => openWhatsApp({ text: noticeMessage })}
                             >
                               <MessageSquare style={{ width: '14px', height: '14px' }} /> Share Round {roundNum} Notice to WhatsApp
                             </button>
@@ -4287,21 +4286,19 @@ export default function LendApp() {
                           `ரூ ${finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
                           `📅 ${roundNum + 1}ம் சீட்டு திகதி:\n` +
                           `${auctionForm.next_round_date ? new Date(auctionForm.next_round_date).toLocaleDateString() : '____________'}`;
+                        const noticeMessage = appendBankDetails(noticeText);
 
                         return (
                           <div style={{ border: '1px dashed var(--border-light)', borderRadius: '12px', padding: '16px', background: 'rgba(255,255,255,0.01)' }}>
                             <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>✏️ Next Round {roundNum} Draft Notice</span>
                             <div style={{ background: '#334155', color: 'white', borderRadius: '8px', padding: '12px', fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px solid var(--border-light)', marginBottom: '10px' }}>
-                              {noticeText}
+                              {noticeMessage}
                             </div>
                             <button
                               type="button"
                               className="glass-btn glass-btn-secondary"
                               style={{ width: '100%', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontSize: '12px' }}
-                              onClick={() => {
-                                const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(noticeText)}`;
-                                window.open(url, '_blank');
-                              }}
+                              onClick={() => openWhatsApp({ text: noticeMessage })}
                             >
                               <MessageSquare style={{ width: '14px', height: '14px' }} /> Share Draft Notice to WhatsApp
                             </button>
