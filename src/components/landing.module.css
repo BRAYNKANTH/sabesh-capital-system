@@ -296,9 +296,267 @@
   .qrCard { position: static; }
   .hero { padding-top: 24px; }
   .topbar { justify-content: center; }
+  .nav { justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }
   .btn:active { transform: none; }
+}
+
+/* ================= landing redesign: dark hero + business card ================= */
+.heroPanel {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 32px;
+  align-items: center;
+  padding: clamp(28px, 5vw, 56px);
+  margin-top: 6px;
+  border-radius: 32px;
+  color: #fff;
+  background:
+    radial-gradient(600px 380px at 85% 10%, rgba(232, 137, 43, 0.28), transparent 70%),
+    linear-gradient(135deg, #0f1426 0%, #171d38 55%, #1f2646 100%);
+  box-shadow: 0 30px 60px -28px rgba(15, 20, 38, 0.7);
+}
+.heroGlow {
+  position: absolute;
+  z-index: -1;
+  left: -120px;
+  bottom: -160px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(246, 194, 91, 0.22), transparent 70%);
+}
+.heroArc {
+  position: absolute;
+  z-index: -1;
+  right: -90px;
+  bottom: -90px;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  border: 36px solid rgba(232, 137, 43, 0.16);
+}
+.heroEyebrow {
+  display: inline-block;
+  margin: 0 0 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f6c25b;
+  background: rgba(246, 194, 91, 0.12);
+  border: 1px solid rgba(246, 194, 91, 0.35);
+}
+.heroH1 {
+  margin: 0 0 16px;
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: clamp(32px, 6vw, 56px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.heroAccent {
+  background: linear-gradient(90deg, #f6c25b, #e8892b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.heroLead {
+  margin: 0 0 26px;
+  max-width: 520px;
+  font-size: clamp(16px, 2.4vw, 18px);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
+}
+.ctaRow2 { display: flex; gap: 12px; flex-wrap: wrap; }
+.btnGold {
+  background: linear-gradient(135deg, #f6c25b, #e8892b);
+  color: #1b1405;
+  box-shadow: 0 10px 22px -8px rgba(232, 137, 43, 0.7);
+}
+.btnGold:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.btnOutline { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+.btnOutline:hover { background: rgba(255, 255, 255, 0.12); }
+.heroPanel a:focus-visible { outline-color: #f6c25b; }
+
+.heroCard { min-width: 0; display: flex; justify-content: center; }
+
+/* ---------- business card banner ---------- */
+.card3d { width: 100%; max-width: 460px; perspective: 1000px; }
+.bizCard {
+  position: relative;
+  overflow: hidden;
+  padding: 24px 26px 38px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbf9f4, #f1ece2);
+  color: #1c1c24;
+  box-shadow: 0 28px 50px -20px rgba(0, 0, 0, 0.7);
+  transform: rotate(-2deg);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  animation: floatCard 6s ease-in-out infinite;
+}
+.bizCard:hover { transform: rotate(0deg) translateY(-4px); animation-play-state: paused; }
+.bizSwooshTop {
+  position: absolute;
+  top: -40px;
+  left: -50px;
+  width: 190px;
+  height: 90px;
+  background: linear-gradient(90deg, #e8892b, #f6c25b 60%, transparent);
+  border-radius: 0 0 100% 0;
+  transform: rotate(-10deg);
+  opacity: 0.9;
+}
+.bizSwooshSide {
+  position: absolute;
+  right: -34px;
+  top: -10px;
+  width: 120px;
+  height: 130%;
+  background: linear-gradient(180deg, #e8892b 0%, #f6c25b 22%, #23233a 22.5%, #15152a 100%);
+  transform: skewX(-18deg);
+  border-radius: 24px 0 0 24px;
+}
+.bizStripe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  background: linear-gradient(90deg, #e8892b, #f6c25b 55%, #e8892b);
+}
+.bizHead { position: relative; display: flex; align-items: center; gap: 16px; }
+.logoMark { flex: none; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35)); }
+.bizName { display: flex; flex-direction: column; min-width: 0; }
+.bizNameMain {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(26px, 6.4vw, 36px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.bizNameSub {
+  align-self: center;
+  margin-top: 2px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(13px, 3.4vw, 17px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #2b2b3a;
+}
+.bizRule { position: relative; border: 0; height: 2px; margin: 16px 0 14px; width: 80%; background: linear-gradient(90deg, #2b2b3a, rgba(43, 43, 58, 0.15)); }
+.bizList { position: relative; list-style: none; margin: 0; padding: 0 76px 0 0; display: grid; gap: 10px; }
+.bizList li { display: flex; align-items: flex-start; gap: 10px; font-weight: 700; font-size: clamp(13px, 3.3vw, 15px); line-height: 1.35; }
+.bizList a { color: #1c1c24; text-decoration: none; overflow-wrap: anywhere; }
+.bizList a:hover { text-decoration: underline; }
+.bizIcon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #f0a043, #d9791f);
+}
+@keyframes floatCard {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+
+/* ---------- trust strip ---------- */
+.trust {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+.trustItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+}
+.trustItem svg { color: #d9791f; flex: none; }
+
+/* ---------- motion ---------- */
+.lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.lift:hover { transform: translateY(-4px); box-shadow: 0 22px 36px -18px rgba(15, 20, 38, 0.35); }
+.heroCopy > * { animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.heroCopy > *:nth-child(2) { animation-delay: 0.08s; }
+.heroCopy > *:nth-child(3) { animation-delay: 0.16s; }
+.heroCopy > *:nth-child(4) { animation-delay: 0.24s; }
+.heroCard { animation: riseIn 0.9s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: none; }
+}
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: riseIn linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 30%;
+  }
+}
+
+/* ---------- contact tiles ---------- */
+.contactGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.contactTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+  text-decoration: none;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.contactTile .cardIcon { margin-bottom: 10px; }
+.contactLabel { font-size: 12.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.contactValue { font-family: var(--font-title); font-weight: 800; font-size: 18px; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .heroPanel { grid-template-columns: 1fr; text-align: center; border-radius: 26px; }
+  .heroLead { margin-left: auto; margin-right: auto; }
+  .ctaRow2 { justify-content: center; }
+  .card3d { margin: 0 auto; }
+}
+@media (max-width: 420px) {
+  .bizCard { padding: 18px 16px 34px; }
+  .bizList { padding-right: 36px; }
+  .bizList li { font-size: 12.5px; gap: 8px; }
+  .bizList a { overflow-wrap: break-word; }
+  .logoMark { width: 54px; height: 54px; }
+  .bizSwooshSide { width: 90px; right: -30px; }
+  .heroPanel .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bizCard { animation: none; }
+  .heroCopy > *, .heroCard { animation: none; }
+  .reveal { animation: none; }
+  .lift, .bizCard { transition: none; }
+  .lift:hover { transform: none; }
 }
