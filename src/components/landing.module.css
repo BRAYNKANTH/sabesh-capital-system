@@ -688,3 +688,21 @@
 
 .qrCard { color: #101b2e; }
 .qrCard .btn { width: 100%; }
+
+/* bank logos beside each account */
+.bankLogo {
+  flex: none;
+  width: 124px;
+  height: 58px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 1px solid rgba(219, 227, 239, 0.95);
+  box-shadow: 0 6px 14px -8px rgba(15, 20, 38, 0.35);
+}
+.bankLogo img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+@media (max-width: 480px) {
+  .bankLogo { width: 104px; height: 50px; padding: 6px 8px; border-radius: 12px; }
+}

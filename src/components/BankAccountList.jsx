@@ -67,7 +67,14 @@ export default function BankAccountList({ columns = 1 }) {
           return (
             <li key={a.id} className={styles.account}>
               <div className={styles.accountHead}>
-                <span className={styles.bankBadge} aria-hidden="true">{badgeOf(a.bank)}</span>
+                {a.logo ? (
+                  <span className={styles.bankLogo}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.logo} alt={`${a.bank} logo`} decoding="async" />
+                  </span>
+                ) : (
+                  <span className={styles.bankBadge} aria-hidden="true">{badgeOf(a.bank)}</span>
+                )}
                 <div className={styles.accountTitle}>
                   <h3 className={styles.accountLabel}>{a.label}</h3>
                   <p className={styles.accountBank}>
