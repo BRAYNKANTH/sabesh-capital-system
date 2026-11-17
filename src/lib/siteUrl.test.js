@@ -16,17 +16,18 @@ describe('isDevHost', () => {
 });
 
 describe('publicSiteUrl', () => {
-  it('uses the live site when opened on localhost', () => {
+  it('uses the public domain', () => {
+    expect(LIVE_SITE_URL).toBe('https://sabesfinance.lk');
+    expect(publicSiteUrl({})).toBe(LIVE_SITE_URL);
+    expect(publicSiteUrl()).toBe(LIVE_SITE_URL);
+  });
+
+  it('ignores the address the page was opened from', () => {
     expect(publicSiteUrl({ hostname: 'localhost', origin: 'http://localhost:3000' })).toBe(LIVE_SITE_URL);
+    expect(publicSiteUrl({ hostname: 'sabeshcapital.vercel.app', origin: 'https://sabeshcapital.vercel.app' })).toBe(LIVE_SITE_URL);
   });
 
-  it('uses the address the page is opened from when it is a public host', () => {
-    expect(publicSiteUrl({ hostname: 'sabeshcapital.vercel.app', origin: 'https://sabeshcapital.vercel.app' })).toBe('https://sabeshcapital.vercel.app');
-    expect(publicSiteUrl({ hostname: 'pay.example.lk', origin: 'https://pay.example.lk' })).toBe('https://pay.example.lk');
-  });
-
-  it('lets NEXT_PUBLIC_SITE_URL win everywhere and drops trailing slashes', () => {
-    expect(publicSiteUrl({ envUrl: 'https://custom.example.lk/', hostname: 'localhost', origin: 'http://localhost:3000' })).toBe('https://custom.example.lk');
-    expect(publicSiteUrl({ envUrl: 'https://custom.example.lk', hostname: 'sabeshcapital.vercel.app', origin: 'https://sabeshcapital.vercel.app' })).toBe('https://custom.example.lk');
+  it('lets NEXT_PUBLIC_SITE_URL win and drops trailing slashes', () => {
+    expect(publicSiteUrl({ envUrl: 'https://custom.example.lk/' })).toBe('https://custom.example.lk');
   });
 });

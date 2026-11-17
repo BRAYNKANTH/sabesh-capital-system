@@ -35,8 +35,11 @@ const detailsText = (a) => [
   `Account number: ${a.accountNumber}`
 ].filter(Boolean).join('\n');
 
+// Short badge text for a bank: the initials, keeping all-capital words whole (LB Finance -> LBF).
+const badgeOf = (bank) => String(bank || '').split(' ').filter((w) => w && w.toUpperCase() !== 'PLC').map((w) => (w === w.toUpperCase() ? w : w[0].toUpperCase())).join('').slice(0, 3);
+
 // The bank accounts, each with a one-tap "Copy number" and a "Copy all details".
-export default function BankAccountList() {
+export default function BankAccountList({ columns = 1 }) {
   const [copied, setCopied] = useState(''); // `${id}:number` or `${id}:all`
   const [announce, setAnnounce] = useState('');
   const timer = useRef(null);
@@ -57,18 +60,23 @@ export default function BankAccountList() {
 
   return (
     <div>
-      <ul className={styles.accounts}>
+      <ul className={`${styles.accounts} ${columns === 2 ? styles.accountsTwo : ''}`}>
         {BANK_ACCOUNTS.map((a) => {
           const numberCopied = copied === `${a.id}:number`;
           const allCopied = copied === `${a.id}:all`;
           return (
             <li key={a.id} className={styles.account}>
-              <h3 className={styles.accountLabel}>{a.label}</h3>
-              <p className={styles.accountBank}>
-                {a.bank}
-                {a.branch ? <span className={styles.accountMeta}> · {a.branch} branch</span> : null}
-              </p>
-              {a.holder && <p className={styles.accountMeta}>Account holder: {a.holder}</p>}
+              <div className={styles.accountHead}>
+                <span className={styles.bankBadge} aria-hidden="true">{badgeOf(a.bank)}</span>
+                <div className={styles.accountTitle}>
+                  <h3 className={styles.accountLabel}>{a.label}</h3>
+                  <p className={styles.accountBank}>
+                    {a.bank}
+                    {a.branch ? <span className={styles.accountMeta}> · {a.branch} branch</span> : null}
+                  </p>
+                  {a.holder && <p className={styles.accountMeta}>Account holder: {a.holder}</p>}
+                </div>
+              </div>
               <p className={styles.accountNumber} aria-label={`Account number ${a.accountNumber.split('').join(' ')}`}>{a.accountNumber}</p>
               <div className={styles.accountActions}>
                 <button type="button" className={`${styles.btn} ${numberCopied ? styles.btnDone : styles.btnPrimary}`} onClick={() => copy(a, 'number')}
