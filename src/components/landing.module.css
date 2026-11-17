@@ -308,6 +308,7 @@
 .heroPanel {
   position: relative;
   overflow: hidden;
+  overflow: clip;
   isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
@@ -395,6 +396,7 @@
 .bizCard {
   position: relative;
   overflow: hidden;
+  overflow: clip;
   padding: 24px 26px 38px;
   border-radius: 18px;
   background: linear-gradient(180deg, #fbf9f4, #f1ece2);
@@ -545,11 +547,11 @@
 }
 @media (max-width: 420px) {
   .bizCard { padding: 18px 16px 34px; }
-  .bizList { padding-right: 36px; }
-  .bizList li { font-size: 12.5px; gap: 8px; }
+  .bizList { padding-right: 18px; }
+  .bizList li { font-size: 12px; gap: 8px; }
   .bizList a { overflow-wrap: break-word; }
   .logoMark { width: 54px; height: 54px; }
-  .bizSwooshSide { width: 90px; right: -30px; }
+  .bizSwooshSide { width: 56px; right: -34px; }
   .heroPanel .btn { width: 100%; }
 }
 
@@ -559,4 +561,29 @@
   .reveal { animation: none; }
   .lift, .bizCard { transition: none; }
   .lift:hover { transform: none; }
+}
+
+/* ---------- small phones (<= 480px): tighter gutters, compact header, one-row nav ---------- */
+@media (max-width: 480px) {
+  .wrap { padding: 0 12px; }
+  .topbar { padding: 12px 0 10px; gap: 6px; }
+  .brand { font-size: 17px; gap: 10px; }
+  .brandLogo { width: 38px; height: 38px; border-radius: 10px; }
+  .nav { flex-wrap: nowrap; gap: 2px; width: 100%; justify-content: space-between; }
+  .navLink { font-size: 14px; padding: 8px 10px; min-height: 44px; }
+  .nav .btn { padding: 6px 14px; font-size: 14px; min-height: 40px; }
+  .heroPanel { padding: 22px 16px 26px; gap: 22px; border-radius: 22px; margin-top: 2px; }
+  .heroEyebrow { font-size: 11px; letter-spacing: 0.1em; padding: 5px 10px; margin-bottom: 12px; white-space: nowrap; }
+  .heroH1 { font-size: 28px; margin-bottom: 12px; }
+  .heroLead { font-size: 15px; margin-bottom: 20px; }
+  .card3d { max-width: 100%; }
+  .bizCard { transform: rotate(-1deg); }
+  .trust { margin-top: 16px; gap: 8px; }
+  .trustItem { padding: 12px; font-size: 14.5px; }
+  .section { padding: 28px 0; }
+  .sectionLead { margin-bottom: 20px; }
+  .card { padding: 20px; border-radius: 20px; }
+  .step { padding-top: 26px; }
+  .contactTile { padding: 18px; border-radius: 20px; }
+  .accountActions .btn { flex-basis: 100%; }
 }
